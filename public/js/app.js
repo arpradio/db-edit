@@ -1,26 +1,22 @@
 let originalData = {};
 let currentChanges = {};
 let lastSearchQuery = '';
+let selectedSongs = new Set();
+let bulkEditMode = false;
 
-// Tab functionality
 function showTab(tabName) {
-    // Hide all tab contents
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
     });
     
-    // Remove active class from all tab buttons
     document.querySelectorAll('.tab-button').forEach(button => {
         button.classList.remove('active');
     });
     
-    // Show selected tab content
     document.getElementById(tabName + 'Tab').classList.add('active');
     
-    // Add active class to clicked button
     event.target.classList.add('active');
     
-    // Load data for specific tabs
     if (tabName === 'quality') {
         loadQualityCounts();
     } else if (tabName === 'stats') {
@@ -42,7 +38,6 @@ async function searchSongs() {
         const response = await fetch(`/api/songs/search?q=${encodeURIComponent(query)}`);
         const songs = await response.json();
         
-        // Switch to search tab and display results
         showTabByName('search');
         displaySongs(songs);
     } catch (error) {
@@ -76,6 +71,8 @@ function clearResults() {
     document.getElementById('searchInput').value = '';
     lastSearchQuery = '';
     originalData = {};
+    selectedSongs.clear();
+    updateBulkEditControls();
 }
 
 async function refreshSearch() {
@@ -88,90 +85,6 @@ async function refreshSearch() {
 let selectedItems = new Set();
 let currentIssueType = '';
 
-// Tab functionality
-function showTab(tabName) {
-    // Hide all tab contents
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    
-    // Remove active class from all tab buttons
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.classList.remove('active');
-    });
-    
-    // Show selected tab content
-    document.getElementById(tabName + 'Tab').classList.add('active');
-    
-    // Add active class to clicked button
-    event.target.classList.add('active');
-    
-    // Load data for specific tabs
-    if (tabName === 'quality') {
-        loadQualityCounts();
-    } else if (tabName === 'stats') {
-        loadStats();
-    }
-}
-
-async function searchSongs() {
-    const query = document.getElementById('searchInput').value;
-    if (!query.trim()) {
-        showMessage('Please enter a search term', 'info');
-        return;
-    }
-    
-    lastSearchQuery = query;
-    showLoading();
-    
-    try {
-        const response = await fetch(`/api/songs/search?q=${encodeURIComponent(query)}`);
-        const songs = await response.json();
-        
-        // Switch to search tab and display results
-        showTabByName('search');
-        displaySongs(songs);
-    } catch (error) {
-        console.error('Search error:', error);
-        showError('Failed to search songs');
-    } finally {
-        hideLoading();
-    }
-}
-
-function showTabByName(tabName) {
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.classList.remove('active');
-    });
-    
-    document.getElementById(tabName + 'Tab').classList.add('active');
-    document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
-}
-
-function clearResults() {
-    const container = document.getElementById('songsContainer');
-    const emptyState = document.getElementById('emptyState');
-    
-    container.innerHTML = '';
-    container.appendChild(emptyState);
-    emptyState.style.display = 'block';
-    
-    document.getElementById('searchInput').value = '';
-    lastSearchQuery = '';
-    originalData = {};
-}
-
-async function refreshSearch() {
-    if (lastSearchQuery) {
-        document.getElementById('searchInput').value = lastSearchQuery;
-        await searchSongs();
-    }
-}
-
-// Data Quality Functions
 async function loadQualityCounts() {
     try {
         const response = await fetch('/api/quality/counts');
@@ -184,7 +97,6 @@ async function loadQualityCounts() {
         document.getElementById('orphanArtistsCount').textContent = counts.orphan_artists || 0;
         document.getElementById('orphanGenresCount').textContent = counts.orphan_genres || 0;
         
-        // Update visual styling based on counts
         document.querySelectorAll('.quality-count').forEach(el => {
             const count = parseInt(el.textContent);
             if (count === 0) {
@@ -267,7 +179,6 @@ function createSelectAllHTML() {
 
 function createIssueItem(issue, issueType) {
     if (issueType.includes('songs') || issueType.includes('no-')) {
-        // Song-related issues
         return `
             <div class="issue-item" onclick="editSongFromIssue(${issue.id})">
                 <div class="issue-content">
@@ -280,7 +191,6 @@ function createIssueItem(issue, issueType) {
             </div>
         `;
     } else {
-        // Artist/Genre orphan issues with checkboxes
         return `
             <div class="issue-item" data-item-id="${issue.id}">
                 <div class="issue-content">
@@ -374,7 +284,6 @@ async function bulkDeleteSelected() {
     const entityType = currentIssueType.includes('artists') ? 'artists' : 'genres';
     const selectedIds = Array.from(selectedItems);
     
-    // Get names for confirmation
     const selectedNames = selectedIds.map(id => {
         const issueItem = document.querySelector(`div[data-item-id="${id}"] .issue-title`);
         return issueItem ? issueItem.textContent : `ID: ${id}`;
@@ -435,9 +344,8 @@ async function executeBulkDelete(issueType, ids) {
         if (response.ok) {
             showMessage(`Successfully deleted ${ids.length} items`, 'success');
             selectedItems.clear();
-            // Reload the current issues view
             loadDataIssues(currentIssueType);
-            loadQualityCounts(); // Update counts
+            loadQualityCounts();
         } else {
             throw new Error(result.error || 'Failed to delete items');
         }
@@ -447,10 +355,6 @@ async function executeBulkDelete(issueType, ids) {
     } finally {
         hideLoading();
     }
-}
-
-function confirmBulkAction() {
-    // This will be set dynamically by showBulkModal
 }
 
 function getIssueTitle(issueType) {
@@ -465,19 +369,26 @@ function getIssueTitle(issueType) {
     return titles[issueType] || 'Data Issues';
 }
 
-async function editSongFromIssue(songId) {
+async function editSongFromIssue(songId, retryCount = 0) {
     showLoading();
     
     try {
-        // Search for this specific song
+        await new Promise(resolve => setTimeout(resolve, retryCount * 500));
+        
         const response = await fetch(`/api/songs/${songId}`);
+        if (!response.ok) {
+            if (response.status === 404 && retryCount < 3) {
+                hideLoading();
+                return editSongFromIssue(songId, retryCount + 1);
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const song = await response.json();
         
-        // Switch to search tab and display this song
         showTabByName('search');
         displaySongs([song]);
         
-        // Scroll to the song
         setTimeout(() => {
             const songCard = document.querySelector(`[data-song-id="${songId}"]`);
             if (songCard) {
@@ -491,7 +402,12 @@ async function editSongFromIssue(songId) {
         
     } catch (error) {
         console.error('Failed to load song:', error);
-        showMessage('Failed to load song for editing', 'error');
+        if (retryCount < 3) {
+            showMessage(`Retrying... (attempt ${retryCount + 1})`, 'info');
+            hideLoading();
+            return editSongFromIssue(songId, retryCount + 1);
+        }
+        showMessage(`Failed to load song for editing after ${retryCount + 1} attempts: ${error.message}`, 'error');
     } finally {
         hideLoading();
     }
@@ -512,10 +428,9 @@ async function deleteOrphan(type, id, name) {
         
         if (response.ok) {
             showMessage(`Deleted ${name} successfully`, 'success');
-            // Refresh the current issues view
             const currentIssueType = type;
             loadDataIssues(currentIssueType);
-            loadQualityCounts(); // Update counts
+            loadQualityCounts();
         } else {
             throw new Error('Failed to delete');
         }
@@ -527,7 +442,153 @@ async function deleteOrphan(type, id, name) {
     }
 }
 
-// Statistics Functions
+async function deleteSong(songId) {
+    const song = originalData[songId];
+    if (!song) {
+        showMessage('Song data not found', 'error');
+        return;
+    }
+    
+    showDeleteConfirmModal(
+        `Are you sure you want to delete "${song.title}"? This action cannot be undone and will remove all associated data.`,
+        () => executeSingleDelete(songId)
+    );
+}
+
+async function executeSingleDelete(songId) {
+    const song = originalData[songId];
+    closeDeleteModal();
+    showLoading();
+    
+    try {
+        const response = await fetch(`/api/songs/${songId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(`Successfully deleted "${song.title}"`, 'success');
+            
+            const songCard = document.querySelector(`[data-song-id="${songId}"]`);
+            if (songCard) {
+                songCard.remove();
+            }
+            
+            delete originalData[songId];
+            selectedSongs.delete(songId);
+            updateBulkEditControls();
+            
+            const remainingSongs = document.querySelectorAll('.song-card').length;
+            if (remainingSongs === 0) {
+                const container = document.getElementById('songsContainer');
+                const emptyState = document.getElementById('emptyState');
+                container.innerHTML = '';
+                container.appendChild(emptyState);
+                emptyState.style.display = 'block';
+            }
+            
+            setTimeout(() => {
+                if (loadQualityCounts) {
+                    loadQualityCounts();
+                }
+                if (loadStats) {
+                    loadStats();
+                }
+            }, 500);
+            
+        } else {
+            throw new Error(result.error || 'Failed to delete song');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        showMessage(`Failed to delete song: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function bulkDeleteSongs() {
+    if (selectedSongs.size === 0) {
+        showMessage('No songs selected', 'info');
+        return;
+    }
+    
+    const selectedIds = Array.from(selectedSongs);
+    const selectedTitles = selectedIds.map(id => {
+        const song = originalData[id];
+        return song ? song.title : `ID: ${id}`;
+    });
+    
+    showBulkModal(
+        `Delete ${selectedSongs.size} selected songs?`,
+        selectedTitles,
+        () => executeBulkSongDelete(selectedIds)
+    );
+}
+
+async function executeBulkSongDelete(ids) {
+    showLoading();
+    closeBulkModal();
+    
+    try {
+        const response = await fetch('/api/songs/bulk-delete', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ids })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(`Successfully deleted ${ids.length} songs`, 'success');
+            
+            ids.forEach(id => {
+                const songCard = document.querySelector(`[data-song-id="${id}"]`);
+                if (songCard) {
+                    songCard.remove();
+                }
+                delete originalData[id];
+                selectedSongs.delete(id);
+            });
+            
+            updateBulkEditControls();
+            
+            const remainingSongs = document.querySelectorAll('.song-card').length;
+            if (remainingSongs === 0) {
+                const container = document.getElementById('songsContainer');
+                const emptyState = document.getElementById('emptyState');
+                container.innerHTML = '';
+                container.appendChild(emptyState);
+                emptyState.style.display = 'block';
+            }
+            
+            if (bulkEditMode) {
+                toggleBulkEditMode();
+            }
+            
+            setTimeout(() => {
+                if (loadQualityCounts) {
+                    loadQualityCounts();
+                }
+                if (loadStats) {
+                    loadStats();
+                }
+            }, 500);
+            
+        } else {
+            throw new Error(result.error || 'Failed to delete songs');
+        }
+    } catch (error) {
+        console.error('Bulk delete error:', error);
+        showMessage(`Failed to delete songs: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
 async function loadStats() {
     try {
         const response = await fetch('/api/stats');
@@ -546,6 +607,166 @@ async function loadStats() {
     }
 }
 
+function toggleBulkEditMode() {
+    bulkEditMode = !bulkEditMode;
+    const button = document.getElementById('bulkEditToggle');
+    
+    if (bulkEditMode) {
+        button.textContent = 'Exit Bulk Edit';
+        button.classList.add('btn-secondary');
+        button.classList.remove('btn-primary');
+        selectedSongs.clear();
+        updateBulkEditControls();
+        addSongCheckboxes();
+    } else {
+        button.textContent = 'Bulk Edit Mode';
+        button.classList.add('btn-primary');
+        button.classList.remove('btn-secondary');
+        selectedSongs.clear();
+        updateBulkEditControls();
+        removeSongCheckboxes();
+    }
+}
+
+function addSongCheckboxes() {
+    document.querySelectorAll('.song-card').forEach(card => {
+        const songId = card.dataset.songId;
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'song-checkbox';
+        checkbox.dataset.songId = songId;
+        checkbox.onchange = () => toggleSongSelection(songId);
+        
+        const checkboxContainer = document.createElement('div');
+        checkboxContainer.className = 'song-checkbox-container';
+        checkboxContainer.appendChild(checkbox);
+        
+        card.insertBefore(checkboxContainer, card.firstChild);
+    });
+}
+
+function removeSongCheckboxes() {
+    document.querySelectorAll('.song-checkbox-container').forEach(container => {
+        container.remove();
+    });
+}
+
+function toggleSongSelection(songId) {
+    const checkbox = document.querySelector(`input[data-song-id="${songId}"]`);
+    const card = document.querySelector(`[data-song-id="${songId}"]`);
+    
+    if (checkbox.checked) {
+        selectedSongs.add(parseInt(songId));
+        card.classList.add('selected');
+    } else {
+        selectedSongs.delete(parseInt(songId));
+        card.classList.remove('selected');
+    }
+    
+    updateBulkEditControls();
+}
+
+function updateBulkEditControls() {
+    const controls = document.getElementById('bulkEditControls');
+    if (controls) {
+        if (bulkEditMode && selectedSongs.size > 0) {
+            controls.style.display = 'block';
+            document.getElementById('selectedCount').textContent = selectedSongs.size;
+        } else {
+            controls.style.display = 'none';
+        }
+    }
+}
+
+function openBulkEditModal() {
+    if (selectedSongs.size === 0) {
+        showMessage('No songs selected', 'info');
+        return;
+    }
+    
+    document.getElementById('bulkTitle').value = '';
+    document.getElementById('bulkDuration').value = '';
+    document.getElementById('bulkStatus').value = '';
+    document.getElementById('bulkArtists').value = '';
+    document.getElementById('bulkGenres').value = '';
+    
+    document.getElementById('bulkEditModal').style.display = 'block';
+}
+
+function closeBulkEditModal() {
+    document.getElementById('bulkEditModal').style.display = 'none';
+}
+
+async function applyBulkChanges() {
+    const title = document.getElementById('bulkTitle').value.trim();
+    const duration = document.getElementById('bulkDuration').value.trim();
+    const status = document.getElementById('bulkStatus').value;
+    const artistsText = document.getElementById('bulkArtists').value.trim();
+    const genresText = document.getElementById('bulkGenres').value.trim();
+    
+    const changes = {};
+    if (title) changes.title = title;
+    if (duration) changes.duration = duration;
+    if (status) changes.validation_status = status;
+    if (artistsText) changes.artists = artistsText.split(',').map(a => a.trim()).filter(a => a);
+    if (genresText) changes.genres = genresText.split(',').map(g => g.trim()).filter(g => g);
+    
+    if (Object.keys(changes).length === 0) {
+        showMessage('No changes specified', 'info');
+        return;
+    }
+    
+    showLoading();
+    closeBulkEditModal();
+    
+    try {
+        const response = await fetch('/api/songs/bulk-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                songs: Array.from(selectedSongs),
+                changes: changes
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(`Successfully updated ${selectedSongs.size} songs`, 'success');
+            
+            selectedSongs.forEach(songId => {
+                if (originalData[songId]) {
+                    originalData[songId] = { ...originalData[songId], ...changes };
+                }
+            });
+            
+            toggleBulkEditMode();
+            
+            setTimeout(async () => {
+                if (lastSearchQuery) {
+                    await refreshSearch();
+                }
+                if (loadQualityCounts) {
+                    loadQualityCounts();
+                }
+                if (loadStats) {
+                    loadStats();
+                }
+            }, 500);
+            
+        } else {
+            throw new Error(result.error || 'Failed to update songs');
+        }
+    } catch (error) {
+        console.error('Bulk update error:', error);
+        showMessage(`Failed to update songs: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
 function displaySongs(songs) {
     const container = document.getElementById('songsContainer');
     const emptyState = document.getElementById('emptyState');
@@ -558,11 +779,28 @@ function displaySongs(songs) {
     
     emptyState.style.display = 'none';
     
-    container.innerHTML = songs.map(song => createSongCard(song)).join('');
+    container.innerHTML = createBulkEditHeader() + songs.map(song => createSongCard(song)).join('');
     
     songs.forEach(song => {
         originalData[song.id] = { ...song };
     });
+    
+    if (bulkEditMode) {
+        addSongCheckboxes();
+    }
+}
+
+function createBulkEditHeader() {
+    return `
+        <div class="bulk-edit-header">
+            <button class="btn btn-primary" id="bulkEditToggle" onclick="toggleBulkEditMode()">Bulk Edit Mode</button>
+            <div id="bulkEditControls" style="display: none;">
+                <span id="selectedCount">0</span> songs selected
+                <button class="btn btn-primary" onclick="openBulkEditModal()">Edit Selected</button>
+                <button class="btn btn-danger" onclick="bulkDeleteSongs()">Delete Selected</button>
+            </div>
+        </div>
+    `;
 }
 
 function createSongCard(song) {
@@ -642,6 +880,9 @@ function createSongCard(song) {
                 </button>
                 <button class="btn btn-secondary" onclick="revertSong(${song.id})">
                     Revert
+                </button>
+                <button class="btn btn-danger" onclick="deleteSong(${song.id})">
+                    Delete Song
                 </button>
             </div>
         </div>
@@ -789,6 +1030,16 @@ async function confirmSave() {
             }
             
             closeModal();
+            
+            setTimeout(() => {
+                if (loadQualityCounts) {
+                    loadQualityCounts();
+                }
+                if (loadStats) {
+                    loadStats();
+                }
+            }, 500);
+            
         } else {
             throw new Error(result.error || 'Failed to save changes');
         }
@@ -889,20 +1140,38 @@ document.getElementById('searchInput').addEventListener('keypress', function(e) 
     }
 });
 
-// Initialize page
 document.addEventListener('DOMContentLoaded', function() {
-    // Load initial stats
     loadStats();
     loadQualityCounts();
 });
 
+function showDeleteConfirmModal(text, confirmCallback) {
+    document.getElementById('deleteConfirmText').textContent = text;
+    document.getElementById('confirmDeleteBtn').onclick = confirmCallback;
+    document.getElementById('deleteConfirmModal').style.display = 'block';
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteConfirmModal').style.display = 'none';
+}
+
+function confirmDelete() {
+    // This will be set dynamically by showDeleteConfirmModal
+}
+
 window.onclick = function(event) {
     const modal = document.getElementById('saveModal');
     const bulkModal = document.getElementById('bulkModal');
+    const bulkEditModal = document.getElementById('bulkEditModal');
+    const deleteModal = document.getElementById('deleteConfirmModal');
     
     if (event.target === modal) {
         closeModal();
     } else if (event.target === bulkModal) {
         closeBulkModal();
+    } else if (event.target === bulkEditModal) {
+        closeBulkEditModal();
+    } else if (event.target === deleteModal) {
+        closeDeleteModal();
     }
 }
