@@ -11,8 +11,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// === SEARCH ENDPOINTS ===
-
 app.get('/api/songs/search', async (req, res) => {
   try {
     const { q = '' } = req.query;
@@ -67,24 +65,21 @@ app.get('/api/genres/search', async (req, res) => {
   }
 });
 
-// === SONG ENDPOINTS ===
-
 app.get('/api/songs/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
     const songQuery = `
-      SELECT s.*, 
-             array_agg(DISTINCT jsonb_build_object('name', a.name, 'role', sa.role)) 
-               FILTER (WHERE a.id IS NOT NULL) as artists,
-             array_agg(DISTINCT g.name) FILTER (WHERE g.id IS NOT NULL) as genres
+      SELECT s.id, s.title, s.duration, s.validation_status,
+             array_agg(DISTINCT a.name) FILTER (WHERE a.name IS NOT NULL) as artists,
+             array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL) as genres
       FROM metadata.songs s
       LEFT JOIN metadata.song_artists sa ON s.id = sa.song_id
       LEFT JOIN metadata.artists a ON sa.artist_id = a.id
       LEFT JOIN metadata.song_genres sg ON s.id = sg.song_id
       LEFT JOIN metadata.genres g ON sg.genre_id = g.id
       WHERE s.id = $1
-      GROUP BY s.id
+      GROUP BY s.id, s.title, s.duration, s.validation_status
     `;
     
     const result = await pool.query(songQuery, [id]);
@@ -97,6 +92,103 @@ app.get('/api/songs/:id', async (req, res) => {
   } catch (err) {
     console.error('Get song error:', err);
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/songs/bulk-update', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { songs, changes } = req.body;
+    const results = [];
+    
+    for (const songId of songs) {
+      const { artists, genres, title, duration, validation_status } = changes;
+      
+      const songUpdates = {};
+      if (title !== undefined) songUpdates.title = title;
+      if (duration !== undefined) songUpdates.duration = duration;
+      if (validation_status !== undefined) songUpdates.validation_status = validation_status;
+      
+      if (Object.keys(songUpdates).length > 0) {
+        const updateFields = Object.keys(songUpdates).map((key, index) => `${key} = $${index + 2}`).join(', ');
+        const updateValues = [songId, ...Object.values(songUpdates)];
+        
+        await client.query(
+          `UPDATE metadata.songs SET ${updateFields}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          updateValues
+        );
+      }
+      
+      if (artists) {
+        await client.query('DELETE FROM metadata.song_artists WHERE song_id = $1', [songId]);
+        
+        for (const artistName of artists) {
+          let artistResult = await client.query(
+            'SELECT id FROM metadata.artists WHERE name = $1',
+            [artistName]
+          );
+          
+          if (artistResult.rows.length === 0) {
+            artistResult = await client.query(
+              'INSERT INTO metadata.artists (name) VALUES ($1) RETURNING id',
+              [artistName]
+            );
+          }
+          
+          const artistId = artistResult.rows[0].id;
+          
+          await client.query(
+            'INSERT INTO metadata.song_artists (song_id, artist_id, role) VALUES ($1, $2, $3)',
+            [songId, artistId, 'primary']
+          );
+        }
+      }
+      
+      if (genres) {
+        await client.query('DELETE FROM metadata.song_genres WHERE song_id = $1', [songId]);
+        
+        for (const genreName of genres) {
+          let genreResult = await client.query(
+            'SELECT id FROM metadata.genres WHERE name = $1',
+            [genreName]
+          );
+          
+          if (genreResult.rows.length === 0) {
+            genreResult = await client.query(
+              'INSERT INTO metadata.genres (name) VALUES ($1) RETURNING id',
+              [genreName]
+            );
+          }
+          
+          const genreId = genreResult.rows[0].id;
+          
+          await client.query(
+            'INSERT INTO metadata.song_genres (song_id, genre_id) VALUES ($1, $2)',
+            [songId, genreId]
+          );
+        }
+      }
+      
+      results.push(songId);
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({ 
+      success: true, 
+      message: `Successfully updated ${results.length} songs`,
+      updatedSongs: results 
+    });
+    
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Bulk update error:', err);
+    res.status(500).json({ error: 'Failed to update songs' });
+  } finally {
+    client.release();
   }
 });
 
@@ -189,8 +281,6 @@ app.post('/api/songs/:id/update', async (req, res) => {
     client.release();
   }
 });
-
-// === QUALITY & STATS ENDPOINTS ===
 
 app.get('/api/quality/counts', async (req, res) => {
   try {
@@ -302,8 +392,6 @@ app.get('/api/debug/health', async (req, res) => {
   }
 });
 
-// === BULK DELETE ENDPOINTS (MUST COME BEFORE SINGLE DELETE) ===
-
 app.delete('/api/artists/bulk-delete', async (req, res) => {
   const client = await pool.connect();
   
@@ -311,13 +399,11 @@ app.delete('/api/artists/bulk-delete', async (req, res) => {
     await client.query('BEGIN');
     
     const { ids } = req.body;
-    console.log('Bulk delete artists request:', { ids });
     
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Invalid or empty IDs array' });
     }
     
-    // Check if any artists have associated songs
     const checkResult = await client.query(
       'SELECT artist_id FROM metadata.song_artists WHERE artist_id = ANY($1) LIMIT 1',
       [ids]
@@ -331,21 +417,17 @@ app.delete('/api/artists/bulk-delete', async (req, res) => {
       });
     }
     
-    // Get artist names for response
     const namesResult = await client.query(
       'SELECT name FROM metadata.artists WHERE id = ANY($1)',
       [ids]
     );
     
-    // Delete all artists
     const deleteResult = await client.query(
       'DELETE FROM metadata.artists WHERE id = ANY($1)',
       [ids]
     );
     
     await client.query('COMMIT');
-    
-    console.log('Bulk delete success:', deleteResult.rowCount);
     
     res.json({ 
       success: true, 
@@ -370,13 +452,11 @@ app.delete('/api/genres/bulk-delete', async (req, res) => {
     await client.query('BEGIN');
     
     const { ids } = req.body;
-    console.log('Bulk delete genres request:', { ids });
     
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Invalid or empty IDs array' });
     }
     
-    // Check if any genres have associated songs
     const checkResult = await client.query(
       'SELECT genre_id FROM metadata.song_genres WHERE genre_id = ANY($1) LIMIT 1',
       [ids]
@@ -390,21 +470,17 @@ app.delete('/api/genres/bulk-delete', async (req, res) => {
       });
     }
     
-    // Get genre names for response
     const namesResult = await client.query(
       'SELECT name FROM metadata.genres WHERE id = ANY($1)',
       [ids]
     );
     
-    // Delete all genres
     const deleteResult = await client.query(
       'DELETE FROM metadata.genres WHERE id = ANY($1)',
       [ids]
     );
     
     await client.query('COMMIT');
-    
-    console.log('Bulk delete success:', deleteResult.rowCount);
     
     res.json({ 
       success: true, 
@@ -422,14 +498,10 @@ app.delete('/api/genres/bulk-delete', async (req, res) => {
   }
 });
 
-// === SINGLE DELETE ENDPOINTS (MUST COME AFTER BULK DELETE) ===
-
 app.delete('/api/artists/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('Single delete artist request:', { id });
     
-    // Check if artist has any songs
     const checkResult = await pool.query(
       'SELECT count(*) FROM metadata.song_artists WHERE artist_id = $1',
       [id]
@@ -458,9 +530,7 @@ app.delete('/api/artists/:id', async (req, res) => {
 app.delete('/api/genres/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('Single delete genre request:', { id });
     
-    // Check if genre has any songs
     const checkResult = await pool.query(
       'SELECT count(*) FROM metadata.song_genres WHERE genre_id = $1',
       [id]
@@ -486,14 +556,94 @@ app.delete('/api/genres/:id', async (req, res) => {
   }
 });
 
-// === START SERVER ===
+app.delete('/api/songs/bulk-delete', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { ids } = req.body;
+    console.log('Bulk delete songs request:', { ids });
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty IDs array' });
+    }
+    
+    const songsResult = await client.query(
+      'SELECT id, title FROM metadata.songs WHERE id = ANY($1)',
+      [ids]
+    );
+    
+    if (songsResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'No songs found with provided IDs' });
+    }
+    
+    const deleteResult = await client.query(
+      'DELETE FROM metadata.songs WHERE id = ANY($1)',
+      [ids]
+    );
+    
+    await client.query('COMMIT');
+    
+    console.log('Bulk delete songs success:', deleteResult.rowCount);
+    
+    res.json({ 
+      success: true, 
+      message: `Successfully deleted ${deleteResult.rowCount} songs`,
+      deletedCount: deleteResult.rowCount,
+      deletedSongs: songsResult.rows
+    });
+    
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Bulk delete songs error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete('/api/songs/:id', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { id } = req.params;
+    console.log('Single delete song request:', { id });
+    
+    const songResult = await client.query(
+      'SELECT title FROM metadata.songs WHERE id = $1',
+      [id]
+    );
+    
+    if (songResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Song not found' });
+    }
+    
+    const deleteResult = await client.query('DELETE FROM metadata.songs WHERE id = $1', [id]);
+    
+    await client.query('COMMIT');
+    
+    console.log('Single delete song success:', songResult.rows[0].title);
+    
+    res.json({ 
+      success: true, 
+      message: `Song "${songResult.rows[0].title}" deleted successfully` 
+    });
+    
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Delete song error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Music DB Editor running on port ${PORT}`);
   console.log(`Open http://localhost:${PORT} to access the editor`);
-  console.log('\nAPI Routes loaded in this order:');
-  console.log('  DELETE /api/artists/bulk-delete (bulk operations)');
-  console.log('  DELETE /api/genres/bulk-delete (bulk operations)');
-  console.log('  DELETE /api/artists/:id (single operations)');
-  console.log('  DELETE /api/genres/:id (single operations)');
 });
