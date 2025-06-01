@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Database Editor</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Music Database Editor</h1>
+        <div class="search-section">
+            <input type="text" class="search-bar" placeholder="Search songs, artists, or genres..." id="searchInput">
+            <button class="btn btn-primary" onclick="searchSongs()">Search</button>
+            <button class="btn btn-secondary" onclick="clearResults()">Clear</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('search')">Search Results</button>
+            <button class="tab-button" onclick="showTab('quality')">Data Quality</button>
+            <button class="tab-button" onclick="showTab('tokens')">Token Management</button>
+            <button class="tab-button" onclick="showTab('stats')">Statistics</button>
+        </div>
+
+        <div id="searchTab" class="tab-content active">
+            <div id="songsContainer">
+                <div class="empty-state" id="emptyState">
+                    <p>Use the search bar above to find songs to edit</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="qualityTab" class="tab-content">
+            <div class="quality-section">
+                <h3>Data Quality Issues</h3>
+                <div class="quality-grid">
+                    <div class="quality-card" onclick="loadDataIssues('no-artists')">
+                        <h4>Songs Without Artists</h4>
+                        <div class="quality-count" id="noArtistsCount">-</div>
+                        <p>Songs missing artist information</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-genres')">
+                        <h4>Songs Without Genres</h4>
+                        <div class="quality-count" id="noGenresCount">-</div>
+                        <p>Songs missing genre classification</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-audio')">
+                        <h4>Songs Without Audio</h4>
+                        <div class="quality-count" id="noAudioCount">-</div>
+                        <p>Songs missing audio files</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-duration')">
+                        <h4>Songs Without Duration</h4>
+                        <div class="quality-count" id="noDurationCount">-</div>
+                        <p>Songs missing duration information</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-tokens')">
+                        <h4>Songs Without Tokens</h4>
+                        <div class="quality-count" id="noTokensCount">-</div>
+                        <p>Songs not linked to any CIP60 tokens</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-images')">
+                        <h4>Songs Without Images</h4>
+                        <div class="quality-count" id="noImagesCount">-</div>
+                        <p>Songs missing cover art or images</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-artists')">
+                        <h4>Orphaned Artists</h4>
+                        <div class="quality-count" id="orphanArtistsCount">-</div>
+                        <p>Artists with no songs</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-genres')">
+                        <h4>Orphaned Genres</h4>
+                        <div class="quality-count" id="orphanGenresCount">-</div>
+                        <p>Genres with no songs</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-tokens')">
+                        <h4>Orphaned Tokens</h4>
+                        <div class="quality-count" id="orphanTokensCount">-</div>
+                        <p>CIP60 tokens with no linked songs</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-images')">
+                        <h4>Orphaned Images</h4>
+                        <div class="quality-count" id="orphanImagesCount">-</div>
+                        <p>Images not linked to any tokens</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('unprocessed-assets')">
+                        <h4>Unprocessed Assets</h4>
+                        <div class="quality-count" id="unprocessedAssetsCount">-</div>
+                        <p>Assets awaiting processing</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('failed-assets')">
+                        <h4>Failed Assets</h4>
+                        <div class="quality-count" id="failedAssetsCount">-</div>
+                        <p>Assets that failed processing</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('empty-playlists')">
+                        <h4>Empty Playlists</h4>
+                        <div class="quality-count" id="emptyPlaylistsCount">-</div>
+                        <p>Playlists with no songs</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('inactive-users')">
+                        <h4>Inactive Users</h4>
+                        <div class="quality-count" id="inactiveUsersCount">-</div>
+                        <p>Users with no activity</p>
+                    </div>
+                </div>
+                <div id="issuesContainer" class="issues-container">
+                    <div class="empty-state">
+                        <p>Click on a data quality card above to view issues</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tokensTab" class="tab-content">
+            <div class="tokens-section">
+                <h3>Token Management</h3>
+                <div class="search-section">
+                    <input type="text" class="search-bar" placeholder="Search tokens by name, policy ID, or release title..." id="tokenSearchInput">
+                    <button class="btn btn-primary" onclick="searchTokens()">Search Tokens</button>
+                    <button class="btn btn-secondary" onclick="clearTokenResults()">Clear</button>
+                </div>
+                <div id="tokensContainer">
+                    <div class="empty-state" id="tokenEmptyState">
+                        <p>Use the search bar above to find tokens to manage</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="statsTab" class="tab-content">
+            <div class="stats-section">
+                <h3>Database Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>Total Songs</h4>
+                        <div class="stat-number" id="totalSongs">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Artists</h4>
+                        <div class="stat-number" id="totalArtists">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Genres</h4>
+                        <div class="stat-number" id="totalGenres">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Tokens</h4>
+                        <div class="stat-number" id="totalTokens">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Images</h4>
+                        <div class="stat-number" id="totalImages">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Users</h4>
+                        <div class="stat-number" id="totalUsers">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Playlists</h4>
+                        <div class="stat-number" id="totalPlaylists">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Verified Songs</h4>
+                        <div class="stat-number" id="verifiedSongs">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Unverified Songs</h4>
+                        <div class="stat-number" id="unverifiedSongs">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Pending Songs</h4>
+                        <div class="stat-number" id="pendingSongs">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Processed Tokens</h4>
+                        <div class="stat-number" id="processedTokens">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Linked Tokens</h4>
+                        <div class="stat-number" id="linkedTokens">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Plays</h4>
+                        <div class="stat-number" id="totalPlays">-</div>
+                    </div>
+                </div>
+                <div class="refresh-stats">
+                    <button class="btn btn-primary" onclick="loadStats()">Refresh Statistics</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulkModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Bulk Action</h3>
+            <p id="bulkActionText">Are you sure you want to perform this action?</p>
+            <div id="bulkItemsList" class="bulk-items-list"></div>
+            <div class="modal-actions">
+                <button class="btn btn-danger" onclick="confirmBulkAction()" id="confirmBulkBtn">Confirm</button>
+                <button class="btn btn-secondary" onclick="closeBulkModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteConfirmModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Deletion</h3>
+            <p id="deleteConfirmText">Are you sure you want to delete this item?</p>
+            <div class="modal-actions">
+                <button class="btn btn-danger" onclick="confirmDelete()" id="confirmDeleteBtn">Delete</button>
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulkEditModal" class="modal">
+        <div class="modal-content">
+            <h3>Bulk Edit Songs</h3>
+            <p>Leave fields empty to keep current values. Changes will apply to all selected songs.</p>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Title:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkTitle" class="editable-field" placeholder="New title (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Duration:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkDuration" class="editable-field" placeholder="New duration (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Status:</span>
+                <div class="metadata-value">
+                    <select id="bulkStatus" class="editable-field">
+                        <option value="">Keep current status</option>
+                        <option value="unverified">Unverified</option>
+                        <option value="verified">Verified</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Artists:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkArtists" class="editable-field" placeholder="Comma-separated artist names (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Genres:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkGenres" class="editable-field" placeholder="Comma-separated genre names (optional)">
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="applyBulkChanges()">Apply Changes</button>
+                <button class="btn btn-secondary" onclick="closeBulkEditModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tokenLinkModal" class="modal">
+        <div class="modal-content">
+            <h3>Link Token to Songs</h3>
+            <p>Search and select songs to link to this token.</p>
+            
+            <div class="search-section">
+                <input type="text" class="search-bar" placeholder="Search songs..." id="linkSongSearch">
+                <button class="btn btn-primary" onclick="searchSongsForLink()">Search</button>
+            </div>
+            
+            <div id="linkSongResults" class="link-results">
+                <div class="empty-state">
+                    <p>Search for songs to link</p>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="confirmLinkSongs()" id="confirmLinkBtn">Link Selected Songs</button>
+                <button class="btn btn-secondary" onclick="closeTokenLinkModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="saveModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Changes</h3>
+            <p>This will update the following tables:</p>
+            <ul id="changesList"></ul>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="confirmSave()">Confirm Save</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingSpinner" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

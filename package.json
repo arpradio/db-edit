@@ -1,0 +1,22 @@
+{
+  "name": "music-db-editor",
+  "version": "0.1.0",
+  "description": "Lightweight editor for music database relationships",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.0",
+    "dotenv": "^16.0.3",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "keywords": ["music", "database", "editor", "postgresql"],
+  "author": "sudoScientist",
+  "license": "MIT"
+}
