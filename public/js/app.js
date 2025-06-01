@@ -1,0 +1,908 @@
+let originalData = {};
+let currentChanges = {};
+let lastSearchQuery = '';
+
+// Tab functionality
+function showTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    document.getElementById(tabName + 'Tab').classList.add('active');
+    
+    // Add active class to clicked button
+    event.target.classList.add('active');
+    
+    // Load data for specific tabs
+    if (tabName === 'quality') {
+        loadQualityCounts();
+    } else if (tabName === 'stats') {
+        loadStats();
+    }
+}
+
+async function searchSongs() {
+    const query = document.getElementById('searchInput').value;
+    if (!query.trim()) {
+        showMessage('Please enter a search term', 'info');
+        return;
+    }
+    
+    lastSearchQuery = query;
+    showLoading();
+    
+    try {
+        const response = await fetch(`/api/songs/search?q=${encodeURIComponent(query)}`);
+        const songs = await response.json();
+        
+        // Switch to search tab and display results
+        showTabByName('search');
+        displaySongs(songs);
+    } catch (error) {
+        console.error('Search error:', error);
+        showError('Failed to search songs');
+    } finally {
+        hideLoading();
+    }
+}
+
+function showTabByName(tabName) {
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    document.getElementById(tabName + 'Tab').classList.add('active');
+    document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+}
+
+function clearResults() {
+    const container = document.getElementById('songsContainer');
+    const emptyState = document.getElementById('emptyState');
+    
+    container.innerHTML = '';
+    container.appendChild(emptyState);
+    emptyState.style.display = 'block';
+    
+    document.getElementById('searchInput').value = '';
+    lastSearchQuery = '';
+    originalData = {};
+}
+
+async function refreshSearch() {
+    if (lastSearchQuery) {
+        document.getElementById('searchInput').value = lastSearchQuery;
+        await searchSongs();
+    }
+}
+
+let selectedItems = new Set();
+let currentIssueType = '';
+
+// Tab functionality
+function showTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    document.getElementById(tabName + 'Tab').classList.add('active');
+    
+    // Add active class to clicked button
+    event.target.classList.add('active');
+    
+    // Load data for specific tabs
+    if (tabName === 'quality') {
+        loadQualityCounts();
+    } else if (tabName === 'stats') {
+        loadStats();
+    }
+}
+
+async function searchSongs() {
+    const query = document.getElementById('searchInput').value;
+    if (!query.trim()) {
+        showMessage('Please enter a search term', 'info');
+        return;
+    }
+    
+    lastSearchQuery = query;
+    showLoading();
+    
+    try {
+        const response = await fetch(`/api/songs/search?q=${encodeURIComponent(query)}`);
+        const songs = await response.json();
+        
+        // Switch to search tab and display results
+        showTabByName('search');
+        displaySongs(songs);
+    } catch (error) {
+        console.error('Search error:', error);
+        showError('Failed to search songs');
+    } finally {
+        hideLoading();
+    }
+}
+
+function showTabByName(tabName) {
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    document.getElementById(tabName + 'Tab').classList.add('active');
+    document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+}
+
+function clearResults() {
+    const container = document.getElementById('songsContainer');
+    const emptyState = document.getElementById('emptyState');
+    
+    container.innerHTML = '';
+    container.appendChild(emptyState);
+    emptyState.style.display = 'block';
+    
+    document.getElementById('searchInput').value = '';
+    lastSearchQuery = '';
+    originalData = {};
+}
+
+async function refreshSearch() {
+    if (lastSearchQuery) {
+        document.getElementById('searchInput').value = lastSearchQuery;
+        await searchSongs();
+    }
+}
+
+// Data Quality Functions
+async function loadQualityCounts() {
+    try {
+        const response = await fetch('/api/quality/counts');
+        const counts = await response.json();
+        
+        document.getElementById('noArtistsCount').textContent = counts.no_artists || 0;
+        document.getElementById('noGenresCount').textContent = counts.no_genres || 0;
+        document.getElementById('noAudioCount').textContent = counts.no_audio || 0;
+        document.getElementById('noDurationCount').textContent = counts.no_duration || 0;
+        document.getElementById('orphanArtistsCount').textContent = counts.orphan_artists || 0;
+        document.getElementById('orphanGenresCount').textContent = counts.orphan_genres || 0;
+        
+        // Update visual styling based on counts
+        document.querySelectorAll('.quality-count').forEach(el => {
+            const count = parseInt(el.textContent);
+            if (count === 0) {
+                el.classList.add('zero');
+            } else {
+                el.classList.remove('zero');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Failed to load quality counts:', error);
+        showMessage('Failed to load data quality information', 'error');
+    }
+}
+
+async function loadDataIssues(issueType) {
+    currentIssueType = issueType;
+    selectedItems.clear();
+    showLoading();
+    
+    try {
+        const response = await fetch(`/api/quality/issues/${issueType}`);
+        const issues = await response.json();
+        
+        displayIssues(issues, issueType);
+    } catch (error) {
+        console.error('Failed to load issues:', error);
+        showMessage('Failed to load data issues', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function displayIssues(issues, issueType) {
+    const container = document.getElementById('issuesContainer');
+    
+    if (issues.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>No issues found! 🎉</p></div>';
+        return;
+    }
+    
+    const issueTitle = getIssueTitle(issueType);
+    const showBulkActions = issueType.includes('orphan');
+    
+    container.innerHTML = `
+        <h4>${issueTitle} (${issues.length} found)</h4>
+        ${showBulkActions ? createBulkActionsHTML(issueType) : ''}
+        <div class="issues-list">
+            ${showBulkActions ? createSelectAllHTML() : ''}
+            ${issues.map(issue => createIssueItem(issue, issueType)).join('')}
+        </div>
+    `;
+    
+    updateBulkActionsVisibility();
+}
+
+function createBulkActionsHTML(issueType) {
+    const entityType = issueType.includes('artists') ? 'artists' : 'genres';
+    return `
+        <div class="bulk-actions" id="bulkActions">
+            <div class="bulk-actions-header">
+                <span class="selection-info" id="selectionInfo">0 items selected</span>
+                <div class="bulk-buttons">
+                    <button class="btn btn-small btn-danger" onclick="bulkDeleteSelected()">Delete Selected</button>
+                    <button class="btn btn-small btn-danger" onclick="bulkDeleteAll('${issueType}')">Delete All ${entityType}</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function createSelectAllHTML() {
+    return `
+        <div class="select-all-container">
+            <input type="checkbox" id="selectAllCheckbox" class="issue-checkbox" onchange="toggleSelectAll()">
+            <label for="selectAllCheckbox">Select All</label>
+        </div>
+    `;
+}
+
+function createIssueItem(issue, issueType) {
+    if (issueType.includes('songs') || issueType.includes('no-')) {
+        // Song-related issues
+        return `
+            <div class="issue-item" onclick="editSongFromIssue(${issue.id})">
+                <div class="issue-content">
+                    <span class="issue-title">${escapeHtml(issue.title || issue.name)}</span>
+                    <span class="issue-id">ID: ${issue.id}</span>
+                </div>
+                <div class="issue-actions">
+                    <button class="btn btn-small btn-primary" onclick="event.stopPropagation(); editSongFromIssue(${issue.id})">Edit</button>
+                </div>
+            </div>
+        `;
+    } else {
+        // Artist/Genre orphan issues with checkboxes
+        return `
+            <div class="issue-item" data-item-id="${issue.id}">
+                <div class="issue-content">
+                    <input type="checkbox" class="issue-checkbox" data-item-id="${issue.id}" onchange="toggleItemSelection(${issue.id})">
+                    <span class="issue-title">${escapeHtml(issue.name)}</span>
+                    <span class="issue-id">ID: ${issue.id}</span>
+                </div>
+                <div class="issue-actions">
+                    <button class="btn btn-small btn-danger" onclick="deleteOrphan('${issueType}', ${issue.id}, '${escapeHtml(issue.name)}')">Delete</button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function toggleItemSelection(itemId) {
+    const checkbox = document.querySelector(`input[data-item-id="${itemId}"]`);
+    const issueItem = document.querySelector(`div[data-item-id="${itemId}"]`);
+    
+    if (checkbox.checked) {
+        selectedItems.add(itemId);
+        issueItem.classList.add('selected');
+    } else {
+        selectedItems.delete(itemId);
+        issueItem.classList.remove('selected');
+    }
+    
+    updateSelectionInfo();
+    updateSelectAllCheckbox();
+    updateBulkActionsVisibility();
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const allCheckboxes = document.querySelectorAll('.issue-checkbox[data-item-id]');
+    
+    selectedItems.clear();
+    
+    allCheckboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+        const itemId = parseInt(checkbox.dataset.itemId);
+        const issueItem = document.querySelector(`div[data-item-id="${itemId}"]`);
+        
+        if (selectAllCheckbox.checked) {
+            selectedItems.add(itemId);
+            issueItem.classList.add('selected');
+        } else {
+            issueItem.classList.remove('selected');
+        }
+    });
+    
+    updateSelectionInfo();
+    updateBulkActionsVisibility();
+}
+
+function updateSelectionInfo() {
+    const selectionInfo = document.getElementById('selectionInfo');
+    if (selectionInfo) {
+        selectionInfo.textContent = `${selectedItems.size} items selected`;
+    }
+}
+
+function updateSelectAllCheckbox() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const allCheckboxes = document.querySelectorAll('.issue-checkbox[data-item-id]');
+    
+    if (selectAllCheckbox && allCheckboxes.length > 0) {
+        const checkedCount = Array.from(allCheckboxes).filter(cb => cb.checked).length;
+        selectAllCheckbox.checked = checkedCount === allCheckboxes.length;
+        selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
+    }
+}
+
+function updateBulkActionsVisibility() {
+    const bulkActions = document.getElementById('bulkActions');
+    if (bulkActions) {
+        if (selectedItems.size > 0) {
+            bulkActions.classList.add('visible');
+        } else {
+            bulkActions.classList.remove('visible');
+        }
+    }
+}
+
+async function bulkDeleteSelected() {
+    if (selectedItems.size === 0) {
+        showMessage('No items selected', 'info');
+        return;
+    }
+    
+    const entityType = currentIssueType.includes('artists') ? 'artists' : 'genres';
+    const selectedIds = Array.from(selectedItems);
+    
+    // Get names for confirmation
+    const selectedNames = selectedIds.map(id => {
+        const issueItem = document.querySelector(`div[data-item-id="${id}"] .issue-title`);
+        return issueItem ? issueItem.textContent : `ID: ${id}`;
+    });
+    
+    showBulkModal(
+        `Delete ${selectedItems.size} selected ${entityType}?`,
+        selectedNames,
+        () => executeBulkDelete(currentIssueType, selectedIds)
+    );
+}
+
+async function bulkDeleteAll(issueType) {
+    const entityType = issueType.includes('artists') ? 'artists' : 'genres';
+    const allItems = document.querySelectorAll('.issue-item[data-item-id]');
+    const allIds = Array.from(allItems).map(item => parseInt(item.dataset.itemId));
+    const allNames = Array.from(allItems).map(item => item.querySelector('.issue-title').textContent);
+    
+    showBulkModal(
+        `Delete ALL ${allIds.length} ${entityType}?`,
+        allNames,
+        () => executeBulkDelete(issueType, allIds)
+    );
+}
+
+function showBulkModal(actionText, itemNames, confirmCallback) {
+    document.getElementById('bulkActionText').textContent = actionText;
+    
+    const itemsList = document.getElementById('bulkItemsList');
+    itemsList.innerHTML = itemNames.map(name => 
+        `<div class="bulk-item">${escapeHtml(name)}</div>`
+    ).join('');
+    
+    document.getElementById('confirmBulkBtn').onclick = confirmCallback;
+    document.getElementById('bulkModal').style.display = 'block';
+}
+
+function closeBulkModal() {
+    document.getElementById('bulkModal').style.display = 'none';
+}
+
+async function executeBulkDelete(issueType, ids) {
+    showLoading();
+    closeBulkModal();
+    
+    try {
+        const endpoint = issueType.includes('artists') ? 'artists' : 'genres';
+        const response = await fetch(`/api/${endpoint}/bulk-delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ids })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(`Successfully deleted ${ids.length} items`, 'success');
+            selectedItems.clear();
+            // Reload the current issues view
+            loadDataIssues(currentIssueType);
+            loadQualityCounts(); // Update counts
+        } else {
+            throw new Error(result.error || 'Failed to delete items');
+        }
+    } catch (error) {
+        console.error('Bulk delete error:', error);
+        showMessage(`Failed to delete items: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function confirmBulkAction() {
+    // This will be set dynamically by showBulkModal
+}
+
+function getIssueTitle(issueType) {
+    const titles = {
+        'no-artists': 'Songs Without Artists',
+        'no-genres': 'Songs Without Genres', 
+        'no-audio': 'Songs Without Audio Files',
+        'no-duration': 'Songs Without Duration',
+        'orphan-artists': 'Artists With No Songs',
+        'orphan-genres': 'Genres With No Songs'
+    };
+    return titles[issueType] || 'Data Issues';
+}
+
+async function editSongFromIssue(songId) {
+    showLoading();
+    
+    try {
+        // Search for this specific song
+        const response = await fetch(`/api/songs/${songId}`);
+        const song = await response.json();
+        
+        // Switch to search tab and display this song
+        showTabByName('search');
+        displaySongs([song]);
+        
+        // Scroll to the song
+        setTimeout(() => {
+            const songCard = document.querySelector(`[data-song-id="${songId}"]`);
+            if (songCard) {
+                songCard.scrollIntoView({ behavior: 'smooth' });
+                songCard.style.border = '2px solid #007bff';
+                setTimeout(() => {
+                    songCard.style.border = '';
+                }, 3000);
+            }
+        }, 100);
+        
+    } catch (error) {
+        console.error('Failed to load song:', error);
+        showMessage('Failed to load song for editing', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteOrphan(type, id, name) {
+    if (!confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        const endpoint = type.includes('artists') ? 'artists' : 'genres';
+        const response = await fetch(`/api/${endpoint}/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showMessage(`Deleted ${name} successfully`, 'success');
+            // Refresh the current issues view
+            const currentIssueType = type;
+            loadDataIssues(currentIssueType);
+            loadQualityCounts(); // Update counts
+        } else {
+            throw new Error('Failed to delete');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        showMessage(`Failed to delete ${name}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Statistics Functions
+async function loadStats() {
+    try {
+        const response = await fetch('/api/stats');
+        const stats = await response.json();
+        
+        document.getElementById('totalSongs').textContent = stats.total_songs || 0;
+        document.getElementById('totalArtists').textContent = stats.total_artists || 0;
+        document.getElementById('totalGenres').textContent = stats.total_genres || 0;
+        document.getElementById('verifiedSongs').textContent = stats.verified_songs || 0;
+        document.getElementById('unverifiedSongs').textContent = stats.unverified_songs || 0;
+        document.getElementById('pendingSongs').textContent = stats.pending_songs || 0;
+        
+    } catch (error) {
+        console.error('Failed to load statistics:', error);
+        showMessage('Failed to load statistics', 'error');
+    }
+}
+
+function displaySongs(songs) {
+    const container = document.getElementById('songsContainer');
+    const emptyState = document.getElementById('emptyState');
+    
+    if (songs.length === 0) {
+        emptyState.style.display = 'block';
+        container.innerHTML = '<div class="empty-state"><p>No songs found</p></div>';
+        return;
+    }
+    
+    emptyState.style.display = 'none';
+    
+    container.innerHTML = songs.map(song => createSongCard(song)).join('');
+    
+    songs.forEach(song => {
+        originalData[song.id] = { ...song };
+    });
+}
+
+function createSongCard(song) {
+    const artists = song.artists || [];
+    const genres = song.genres || [];
+    
+    return `
+        <div class="song-card" data-song-id="${song.id}">
+            <div class="song-header">
+                <div class="song-title">${escapeHtml(song.title)}</div>
+                <div class="song-id">ID: ${song.id}</div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Title:</span>
+                <div class="metadata-value">
+                    <input type="text" class="editable-field" value="${escapeHtml(song.title)}" 
+                           onchange="markChanged(${song.id})" data-field="title">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Artists:</span>
+                <div class="metadata-value">
+                    <div class="tag-container" id="artists-${song.id}" onchange="markChanged(${song.id})">
+                        ${artists.map(artist => `
+                            <div class="tag">
+                                ${escapeHtml(artist)}
+                                <span class="tag-remove" onclick="removeTag(this, ${song.id})">×</span>
+                            </div>
+                        `).join('')}
+                        <input type="text" class="add-tag-input" placeholder="Add artist..." 
+                               onkeypress="addTag(event, 'artists-${song.id}', ${song.id})">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Genres:</span>
+                <div class="metadata-value">
+                    <div class="tag-container" id="genres-${song.id}" onchange="markChanged(${song.id})">
+                        ${genres.map(genre => `
+                            <div class="tag">
+                                ${escapeHtml(genre)}
+                                <span class="tag-remove" onclick="removeTag(this, ${song.id})">×</span>
+                            </div>
+                        `).join('')}
+                        <input type="text" class="add-tag-input" placeholder="Add genre..." 
+                               onkeypress="addTag(event, 'genres-${song.id}', ${song.id})">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Duration:</span>
+                <div class="metadata-value">
+                    <input type="text" class="editable-field" value="${song.duration || ''}" 
+                           style="width: 100px;" onchange="markChanged(${song.id})" data-field="duration">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Status:</span>
+                <div class="metadata-value">
+                    <span class="status-indicator status-${song.validation_status}"></span>
+                    <select class="editable-field" style="width: 140px;" onchange="markChanged(${song.id})" data-field="validation_status">
+                        <option value="unverified" ${song.validation_status === 'unverified' ? 'selected' : ''}>Unverified</option>
+                        <option value="verified" ${song.validation_status === 'verified' ? 'selected' : ''}>Verified</option>
+                        <option value="pending" ${song.validation_status === 'pending' ? 'selected' : ''}>Pending</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-primary" onclick="saveSong(${song.id})" id="save-${song.id}" disabled>
+                    Save Changes
+                </button>
+                <button class="btn btn-secondary" onclick="revertSong(${song.id})">
+                    Revert
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function removeTag(element, songId) {
+    element.parentElement.remove();
+    markChanged(songId);
+}
+
+function addTag(event, containerId, songId) {
+    if (event.key === 'Enter' && event.target.value.trim()) {
+        const container = document.getElementById(containerId);
+        const input = event.target;
+        
+        const tag = document.createElement('div');
+        tag.className = 'tag';
+        tag.innerHTML = `
+            ${escapeHtml(input.value.trim())}
+            <span class="tag-remove" onclick="removeTag(this, ${songId})">×</span>
+        `;
+        
+        container.insertBefore(tag, input);
+        input.value = '';
+        markChanged(songId);
+    }
+}
+
+function markChanged(songId) {
+    const saveButton = document.getElementById(`save-${songId}`);
+    if (saveButton) {
+        saveButton.disabled = false;
+        saveButton.style.background = '#28a745';
+        saveButton.textContent = 'Save Changes*';
+    }
+}
+
+function saveSong(songId) {
+    const changes = detectChanges(songId);
+    if (Object.keys(changes).length === 0) {
+        showMessage('No changes detected', 'info');
+        return;
+    }
+    
+    currentChanges = { songId, changes };
+    showSaveModal(changes);
+}
+
+function detectChanges(songId) {
+    const changes = {};
+    const card = document.querySelector(`[data-song-id="${songId}"]`);
+    
+    const titleInput = card.querySelector('[data-field="title"]');
+    if (titleInput && titleInput.value !== originalData[songId].title) {
+        changes.title = titleInput.value;
+    }
+    
+    const durationInput = card.querySelector('[data-field="duration"]');
+    if (durationInput && durationInput.value !== (originalData[songId].duration || '')) {
+        changes.duration = durationInput.value;
+    }
+    
+    const statusSelect = card.querySelector('[data-field="validation_status"]');
+    if (statusSelect && statusSelect.value !== originalData[songId].validation_status) {
+        changes.validation_status = statusSelect.value;
+    }
+    
+    const artistsContainer = document.getElementById(`artists-${songId}`);
+    const currentArtists = Array.from(artistsContainer.querySelectorAll('.tag'))
+        .map(tag => tag.textContent.replace('×', '').trim());
+    const originalArtists = originalData[songId].artists || [];
+    
+    if (JSON.stringify(currentArtists.sort()) !== JSON.stringify(originalArtists.sort())) {
+        changes.artists = currentArtists;
+    }
+    
+    const genresContainer = document.getElementById(`genres-${songId}`);
+    const currentGenres = Array.from(genresContainer.querySelectorAll('.tag'))
+        .map(tag => tag.textContent.replace('×', '').trim());
+    const originalGenres = originalData[songId].genres || [];
+    
+    if (JSON.stringify(currentGenres.sort()) !== JSON.stringify(originalGenres.sort())) {
+        changes.genres = currentGenres;
+    }
+    
+    return changes;
+}
+
+function showSaveModal(changes) {
+    const changesList = document.getElementById('changesList');
+    changesList.innerHTML = '';
+    
+    const tableUpdates = [];
+    
+    if (changes.title || changes.duration || changes.validation_status) {
+        tableUpdates.push('metadata.songs table (basic info)');
+    }
+    
+    if (changes.artists) {
+        tableUpdates.push(`metadata.song_artists table (${changes.artists.length} artists)`);
+        tableUpdates.push('metadata.artists table (auto-create new artists)');
+    }
+    
+    if (changes.genres) {
+        tableUpdates.push(`metadata.song_genres table (${changes.genres.length} genres)`);
+        tableUpdates.push('metadata.genres table (auto-create new genres)');
+    }
+    
+    tableUpdates.forEach(update => {
+        const li = document.createElement('li');
+        li.textContent = update;
+        changesList.appendChild(li);
+    });
+    
+    document.getElementById('saveModal').style.display = 'block';
+}
+
+async function confirmSave() {
+    const { songId, changes } = currentChanges;
+    
+    showLoading();
+    
+    try {
+        const response = await fetch(`/api/songs/${songId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(changes)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage('Changes saved successfully!', 'success');
+            
+            originalData[songId] = { ...originalData[songId], ...changes };
+            
+            const saveButton = document.getElementById(`save-${songId}`);
+            if (saveButton) {
+                saveButton.disabled = true;
+                saveButton.style.background = '#007bff';
+                saveButton.textContent = 'Save Changes';
+            }
+            
+            closeModal();
+        } else {
+            throw new Error(result.error || 'Failed to save changes');
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+        showMessage('Error saving changes: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function closeModal() {
+    document.getElementById('saveModal').style.display = 'none';
+}
+
+function revertSong(songId) {
+    const original = originalData[songId];
+    if (!original) return;
+    
+    const card = document.querySelector(`[data-song-id="${songId}"]`);
+    
+    const titleInput = card.querySelector('[data-field="title"]');
+    if (titleInput) titleInput.value = original.title;
+    
+    const durationInput = card.querySelector('[data-field="duration"]');
+    if (durationInput) durationInput.value = original.duration || '';
+    
+    const statusSelect = card.querySelector('[data-field="validation_status"]');
+    if (statusSelect) statusSelect.value = original.validation_status;
+    
+    const artistsContainer = document.getElementById(`artists-${songId}`);
+    rebuildTagContainer(artistsContainer, original.artists || [], songId);
+    
+    const genresContainer = document.getElementById(`genres-${songId}`);
+    rebuildTagContainer(genresContainer, original.genres || [], songId);
+    
+    const saveButton = document.getElementById(`save-${songId}`);
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.style.background = '#007bff';
+        saveButton.textContent = 'Save Changes';
+    }
+}
+
+function rebuildTagContainer(container, items, songId) {
+    const input = container.querySelector('.add-tag-input');
+    const placeholder = input.placeholder;
+    const isArtists = placeholder.includes('artist');
+    const containerId = isArtists ? `artists-${songId}` : `genres-${songId}`;
+    
+    container.innerHTML = `
+        ${items.map(item => `
+            <div class="tag">
+                ${escapeHtml(item)}
+                <span class="tag-remove" onclick="removeTag(this, ${songId})">×</span>
+            </div>
+        `).join('')}
+        <input type="text" class="add-tag-input" placeholder="${placeholder}" 
+               onkeypress="addTag(event, '${containerId}', ${songId})">
+    `;
+}
+
+function showLoading() {
+    document.getElementById('loadingSpinner').style.display = 'block';
+}
+
+function hideLoading() {
+    document.getElementById('loadingSpinner').style.display = 'none';
+}
+
+function showMessage(message, type) {
+    const existingMessage = document.querySelector('.success-message, .error-message');
+    if (existingMessage) {
+        existingMessage.remove();
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = type === 'error' ? 'error-message' : 'success-message';
+    messageDiv.textContent = message;
+    
+    const firstContainer = document.querySelector('.container');
+    firstContainer.parentNode.insertBefore(messageDiv, firstContainer.nextSibling);
+    
+    setTimeout(() => {
+        messageDiv.remove();
+    }, 5000);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+}
+
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchSongs();
+    }
+});
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    // Load initial stats
+    loadStats();
+    loadQualityCounts();
+});
+
+window.onclick = function(event) {
+    const modal = document.getElementById('saveModal');
+    const bulkModal = document.getElementById('bulkModal');
+    
+    if (event.target === modal) {
+        closeModal();
+    } else if (event.target === bulkModal) {
+        closeBulkModal();
+    }
+}

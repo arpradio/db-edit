@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Database Editor</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Music Database Editor</h1>
+        <div class="search-section">
+            <input type="text" class="search-bar" placeholder="Search songs, artists, or genres..." id="searchInput">
+            <button class="btn btn-primary" onclick="searchSongs()">Search</button>
+            <button class="btn btn-secondary" onclick="clearResults()">Clear</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('search')">Search Results</button>
+            <button class="tab-button" onclick="showTab('quality')">Data Quality</button>
+            <button class="tab-button" onclick="showTab('stats')">Statistics</button>
+        </div>
+
+        <div id="searchTab" class="tab-content active">
+            <div id="songsContainer">
+                <div class="empty-state" id="emptyState">
+                    <p>Use the search bar above to find songs to edit</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="qualityTab" class="tab-content">
+            <div class="quality-section">
+                <h3>Data Quality Issues</h3>
+                <div class="quality-grid">
+                    <div class="quality-card" onclick="loadDataIssues('no-artists')">
+                        <h4>Songs Without Artists</h4>
+                        <div class="quality-count" id="noArtistsCount">-</div>
+                        <p>Songs missing artist information</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-genres')">
+                        <h4>Songs Without Genres</h4>
+                        <div class="quality-count" id="noGenresCount">-</div>
+                        <p>Songs missing genre classification</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-audio')">
+                        <h4>Songs Without Audio</h4>
+                        <div class="quality-count" id="noAudioCount">-</div>
+                        <p>Songs missing audio files</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-duration')">
+                        <h4>Songs Without Duration</h4>
+                        <div class="quality-count" id="noDurationCount">-</div>
+                        <p>Songs missing duration information</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-artists')">
+                        <h4>Orphaned Artists</h4>
+                        <div class="quality-count" id="orphanArtistsCount">-</div>
+                        <p>Artists with no songs</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-genres')">
+                        <h4>Orphaned Genres</h4>
+                        <div class="quality-count" id="orphanGenresCount">-</div>
+                        <p>Genres with no songs</p>
+                    </div>
+                </div>
+                <div id="issuesContainer" class="issues-container">
+                    <div class="empty-state">
+                        <p>Click on a data quality card above to view issues</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="statsTab" class="tab-content">
+            <div class="stats-section">
+                <h3>Database Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>Total Songs</h4>
+                        <div class="stat-number" id="totalSongs">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Artists</h4>
+                        <div class="stat-number" id="totalArtists">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Total Genres</h4>
+                        <div class="stat-number" id="totalGenres">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Verified Songs</h4>
+                        <div class="stat-number" id="verifiedSongs">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Unverified Songs</h4>
+                        <div class="stat-number" id="unverifiedSongs">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Pending Songs</h4>
+                        <div class="stat-number" id="pendingSongs">-</div>
+                    </div>
+                </div>
+                <div class="refresh-stats">
+                    <button class="btn btn-primary" onclick="loadStats()">Refresh Statistics</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Actions Modal -->
+    <div id="bulkModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Bulk Action</h3>
+            <p id="bulkActionText">Are you sure you want to perform this action?</p>
+            <div id="bulkItemsList" class="bulk-items-list"></div>
+            <div class="modal-actions">
+                <button class="btn btn-danger" onclick="confirmBulkAction()" id="confirmBulkBtn">Confirm</button>
+                <button class="btn btn-secondary" onclick="closeBulkModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="saveModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Changes</h3>
+            <p>This will update the following tables:</p>
+            <ul id="changesList"></ul>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="confirmSave()">Confirm Save</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingSpinner" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
