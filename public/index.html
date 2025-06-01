@@ -110,7 +110,6 @@
         </div>
     </div>
 
-    <!-- Bulk Actions Modal -->
     <div id="bulkModal" class="modal">
         <div class="modal-content">
             <h3>Confirm Bulk Action</h3>
@@ -119,6 +118,119 @@
             <div class="modal-actions">
                 <button class="btn btn-danger" onclick="confirmBulkAction()" id="confirmBulkBtn">Confirm</button>
                 <button class="btn btn-secondary" onclick="closeBulkModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteConfirmModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Deletion</h3>
+            <p id="deleteConfirmText">Are you sure you want to delete this item?</p>
+            <div class="modal-actions">
+                <button class="btn btn-danger" onclick="confirmDelete()" id="confirmDeleteBtn">Delete</button>
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulkEditModal" class="modal">
+        <div class="modal-content">
+            <h3>Bulk Edit Songs</h3>
+            <p>Leave fields empty to keep current values. Changes will apply to all selected songs.</p>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Title:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkTitle" class="editable-field" placeholder="New title (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Duration:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkDuration" class="editable-field" placeholder="New duration (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Status:</span>
+                <div class="metadata-value">
+                    <select id="bulkStatus" class="editable-field">
+                        <option value="">Keep current status</option>
+                        <option value="unverified">Unverified</option>
+                        <option value="verified">Verified</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Artists:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkArtists" class="editable-field" placeholder="Comma-separated artist names (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Genres:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkGenres" class="editable-field" placeholder="Comma-separated genre names (optional)">
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="applyBulkChanges()">Apply Changes</button>
+                <button class="btn btn-secondary" onclick="closeBulkEditModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+        <div class="modal-content">
+            <h3>Bulk Edit Songs</h3>
+            <p>Leave fields empty to keep current values. Changes will apply to all selected songs.</p>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Title:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkTitle" class="editable-field" placeholder="New title (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Duration:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkDuration" class="editable-field" placeholder="New duration (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Status:</span>
+                <div class="metadata-value">
+                    <select id="bulkStatus" class="editable-field">
+                        <option value="">Keep current status</option>
+                        <option value="unverified">Unverified</option>
+                        <option value="verified">Verified</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Artists:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkArtists" class="editable-field" placeholder="Comma-separated artist names (optional)">
+                </div>
+            </div>
+            
+            <div class="metadata-row">
+                <span class="metadata-label">Genres:</span>
+                <div class="metadata-value">
+                    <input type="text" id="bulkGenres" class="editable-field" placeholder="Comma-separated genre names (optional)">
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="applyBulkChanges()">Apply Changes</button>
+                <button class="btn btn-secondary" onclick="closeBulkEditModal()">Cancel</button>
             </div>
         </div>
     </div>
