@@ -342,44 +342,16 @@ let currentIssueType = '';
 async function loadQualityCounts() {
     try {
         const response = await fetch('/api/quality/counts');
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
         const counts = await response.json();
         
-        // Defensive programming - ensure counts is an object
-        if (!counts || typeof counts !== 'object') {
-            throw new Error('Invalid response format: expected object');
-        }
+        document.getElementById('noArtistsCount').textContent = counts.no_artists || 0;
+        document.getElementById('noGenresCount').textContent = counts.no_genres || 0;
+        document.getElementById('noAudioCount').textContent = counts.no_audio || 0;
+        document.getElementById('noDurationCount').textContent = counts.no_duration || 0;
+        document.getElementById('orphanArtistsCount').textContent = counts.orphan_artists || 0;
+        document.getElementById('orphanGenresCount').textContent = counts.orphan_genres || 0;
+        document.getElementById('failedAssetsCount').textContent = counts.failed_assets || 0;
         
-        // Update all count elements with fallback to 0
-        const countElements = {
-            'noArtistsCount': counts.no_artists,
-            'noGenresCount': counts.no_genres,
-            'noAudioCount': counts.no_audio,
-            'noDurationCount': counts.no_duration,
-            'noTokensCount': counts.no_tokens,
-            'noImagesCount': counts.no_images,
-            'orphanArtistsCount': counts.orphan_artists,
-            'orphanGenresCount': counts.orphan_genres,
-            'orphanTokensCount': counts.orphan_tokens,
-            'orphanImagesCount': counts.orphan_images,
-            'unprocessedAssetsCount': counts.unprocessed_assets,
-            'failedAssetsCount': counts.failed_assets,
-            'emptyPlaylistsCount': counts.empty_playlists,
-            'inactiveUsersCount': counts.inactive_users
-        };
-        
-        Object.entries(countElements).forEach(([elementId, value]) => {
-            const element = document.getElementById(elementId);
-            if (element) {
-                element.textContent = value || 0;
-            }
-        });
-        
-        // Apply styling based on counts
         document.querySelectorAll('.quality-count').forEach(el => {
             const count = parseInt(el.textContent);
             if (count === 0) {
@@ -391,14 +363,69 @@ async function loadQualityCounts() {
         
     } catch (error) {
         console.error('Failed to load quality counts:', error);
-        showMessage(`Failed to load data quality information: ${error.message}`, 'error');
-        
-        // Set all counts to error state
-        document.querySelectorAll('.quality-count').forEach(el => {
-            el.textContent = '?';
-            el.classList.remove('zero');
-        });
+        showMessage('Failed to load data quality information', 'error');
     }
+}
+
+function createIssueItem(issue, issueType) {
+    if (issueType.includes('songs') || issueType.includes('no-')) {
+        return `
+            <div class="issue-item" onclick="editSongFromIssue(${issue.id})">
+                <div class="issue-content">
+                    <span class="issue-title">${escapeHtml(issue.title || issue.name)}</span>
+                    <span class="issue-id">ID: ${issue.id}</span>
+                </div>
+                <div class="issue-actions">
+                    <button class="btn btn-small btn-primary" onclick="event.stopPropagation(); editSongFromIssue(${issue.id})">Edit</button>
+                </div>
+            </div>
+        `;
+    } else if (issueType === 'failed-assets') {
+        return `
+            <div class="issue-item">
+                <div class="issue-content">
+                    <span class="issue-title">${escapeHtml(issue.name || issue.title)}</span>
+                    <span class="issue-id">ID: ${issue.id}</span>
+                    <span class="issue-id">${issue.policy_id || ''}</span>
+                    <span class="issue-id">${issue.status || ''}</span>
+                </div>
+                <div class="issue-actions">
+                    <button class="btn btn-small btn-primary" onclick="viewAssetDetails(${issue.id})">View</button>
+                </div>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="issue-item" data-item-id="${issue.id}">
+                <div class="issue-content">
+                    <input type="checkbox" class="issue-checkbox" data-item-id="${issue.id}" onchange="toggleItemSelection(${issue.id})">
+                    <span class="issue-title">${escapeHtml(issue.name)}</span>
+                    <span class="issue-id">ID: ${issue.id}</span>
+                </div>
+                <div class="issue-actions">
+                    <button class="btn btn-small btn-danger" onclick="deleteOrphan('${issueType}', ${issue.id}, '${escapeHtml(issue.name)}')">Delete</button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function getIssueTitle(issueType) {
+    const titles = {
+        'no-artists': 'Songs Without Artists',
+        'no-genres': 'Songs Without Genres', 
+        'no-audio': 'Songs Without Audio Files',
+        'no-duration': 'Songs Without Duration',
+        'orphan-artists': 'Artists With No Songs',
+        'orphan-genres': 'Genres With No Songs',
+        'failed-assets': 'Failed Processing Assets'
+    };
+    return titles[issueType] || 'Data Issues';
+}
+
+function viewAssetDetails(assetId) {
+    console.log('Viewing asset details for ID:', assetId);
+    showMessage('Asset details view not implemented yet', 'info');
 }
 
 // Add debug function to help troubleshoot API issues

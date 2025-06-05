@@ -922,3 +922,196 @@ app.listen(PORT, () => {
   console.log(`Music DB Editor running on port ${PORT}`);
   console.log(`Open http://localhost:${PORT} to access the editor`);
 });
+
+app.get('/api/quality/issues/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    let query;
+    
+    switch (type) {
+      case 'no-artists':
+        query = 'SELECT * FROM find_songs_without_artists(100)';
+        break;
+        
+      case 'no-genres':
+        query = 'SELECT * FROM find_songs_without_genres(100)';
+        break;
+        
+      case 'no-audio':
+        query = `
+          SELECT s.id as song_id, s.title as song_title
+          FROM metadata.songs s
+          LEFT JOIN metadata.audio_files af ON s.id = af.song_id
+          WHERE af.song_id IS NULL
+          ORDER BY s.title LIMIT 100
+        `;
+        break;
+        
+      case 'no-duration':
+        query = `
+          SELECT s.id as song_id, s.title as song_title
+          FROM metadata.songs s
+          WHERE s.duration IS NULL OR trim(s.duration) = ''
+          ORDER BY s.title LIMIT 100
+        `;
+        break;
+        
+      case 'orphan-artists':
+        query = `
+          SELECT a.id, a.name
+          FROM metadata.artists a
+          LEFT JOIN metadata.song_artists sa ON a.id = sa.artist_id
+          WHERE sa.artist_id IS NULL
+          ORDER BY a.name LIMIT 100
+        `;
+        break;
+        
+      case 'orphan-genres':
+        query = `
+          SELECT g.id, g.name
+          FROM metadata.genres g
+          LEFT JOIN metadata.song_genres sg ON g.id = sg.genre_id
+          WHERE sg.genre_id IS NULL
+          ORDER BY g.name LIMIT 100
+        `;
+        break;
+        
+      case 'failed-assets':
+        query = 'SELECT * FROM find_failed_assets(100)';
+        break;
+        
+      default:
+        return res.status(400).json({ error: 'Invalid issue type' });
+    }
+    
+    const result = await pool.query(query);
+    
+    const normalizedRows = result.rows.map(row => {
+      if (row.song_id && row.song_title) {
+        return { id: row.song_id, title: row.song_title };
+      }
+      if (row.asset_name) {
+        return { 
+          id: row.id, 
+          name: row.asset_name,
+          policy_id: row.policy_id,
+          title: row.release_title,
+          status: row.status,
+          processed_at: row.processed_at
+        };
+      }
+      return row;
+    });
+    
+    res.json(normalizedRows);
+  } catch (err) {
+    console.error('Quality issues error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+app.get('/api/tokens/search', async (req, res) => {
+  try {
+    const { q = '' } = req.query;
+    const result = await pool.query('SELECT * FROM search_tokens($1)', [q]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Token search error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+app.get('/api/tokens/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('SELECT * FROM get_token_details($1)', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Token not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Get token error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+app.get('/api/tokens/:id/songs', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('SELECT * FROM get_token_songs($1)', [id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get token songs error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+app.get('/api/processing/stats', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM get_processing_stats()');
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Processing stats error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+app.post('/api/tokens/:id/link-song', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { id } = req.params;
+    const { song_id, is_primary = false } = req.body;
+    
+    await client.query(
+      'INSERT INTO cip60.assets_songs (asset_id, song_id, is_primary) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+      [id, song_id, is_primary]
+    );
+    
+    await client.query('COMMIT');
+    
+    res.json({ success: true, message: 'Song linked to token successfully' });
+    
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Link song error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete('/api/tokens/:tokenId/songs/:songId', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { tokenId, songId } = req.params;
+    
+    const result = await client.query(
+      'DELETE FROM cip60.assets_songs WHERE asset_id = $1 AND song_id = $2',
+      [tokenId, songId]
+    );
+    
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Link not found' });
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({ success: true, message: 'Song unlinked from token successfully' });
+    
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Unlink song error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
