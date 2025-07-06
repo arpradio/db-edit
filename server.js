@@ -243,16 +243,38 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
     const queries = {
         'no-artists': 'SELECT * FROM find_songs_without_artists(100)',
         'no-genres': 'SELECT * FROM find_songs_without_genres(100)',
-        'no-audio': 'SELECT * FROM find_songs_without_audio(100)',
-        'no-duration': 'SELECT * FROM find_songs_without_duration(100)',
-        'no-isrc': 'SELECT * FROM find_songs_without_isrc(100)',
+        'no-audio': `
+            SELECT s.id as song_id, s.title as song_title
+            FROM metadata.songs s
+            LEFT JOIN metadata.audio_files af ON s.id = af.song_id
+            WHERE af.song_id IS NULL
+            ORDER BY s.title LIMIT 100
+        `,
+        'no-duration': `
+            SELECT s.id as song_id, s.title as song_title
+            FROM metadata.songs s
+            WHERE s.duration IS NULL OR trim(s.duration) = ''
+            ORDER BY s.title LIMIT 100
+        `,
+        'no-isrc': `
+            SELECT s.id as song_id, s.title as song_title
+            FROM metadata.songs s
+            WHERE s.isrc IS NULL OR trim(s.isrc) = ''
+            ORDER BY s.title LIMIT 100
+        `,
         'no-iswc': `
             SELECT s.id as song_id, s.title as song_title
             FROM metadata.songs s
             WHERE s.iswc IS NULL OR trim(s.iswc) = ''
             ORDER BY s.title LIMIT 100
         `,
-        'no-tokens': 'SELECT * FROM find_songs_without_tokens(100)',
+        'no-tokens': `
+            SELECT s.id as song_id, s.title as song_title
+            FROM metadata.songs s
+            LEFT JOIN cip60.assets_songs asongs ON s.id = asongs.song_id
+            WHERE asongs.song_id IS NULL
+            ORDER BY s.title LIMIT 100
+        `,
         'orphan-artists': `
             SELECT a.id, a.name
             FROM metadata.artists a
@@ -279,16 +301,21 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
         return res.status(400).json({ error: 'Invalid issue type' });
     }
     
-    const result = await pool.query(query);
-    
-    const normalizedRows = result.rows.map(row => {
-        if (row.song_id && row.song_title) {
-            return { id: row.song_id, title: row.song_title };
-        }
-        return row;
-    });
-    
-    res.json(normalizedRows);
+    try {
+        const result = await pool.query(query);
+        
+        const normalizedRows = result.rows.map(row => {
+            if (row.song_id && row.song_title) {
+                return { id: row.song_id, title: row.song_title };
+            }
+            return row;
+        });
+        
+        res.json(normalizedRows);
+    } catch (error) {
+        console.error('Query error for type:', type, error);
+        res.status(500).json({ error: 'Database query failed: ' + error.message });
+    }
 }));
 
 app.get('/api/stats', asyncHandler(async (req, res) => {
@@ -521,19 +548,94 @@ app.delete('/api/songs/:id', asyncHandler(async (req, res) => {
     }
 }));
 
+app.post('/api/songs/:songId/audio-files', asyncHandler(async (req, res) => {
+    const { songId } = req.params;
+    const { file_url, file_type, ipfs_cid } = req.body;
+    
+    if (!file_url || !file_type) {
+        return res.status(400).json({ error: 'file_url and file_type are required' });
+    }
+    
+    try {
+        const result = await pool.query(
+            'INSERT INTO metadata.audio_files (song_id, file_url, file_type, ipfs_cid) VALUES ($1, $2, $3, $4) RETURNING *',
+            [songId, file_url, file_type, ipfs_cid || null]
+        );
+        
+        res.json({ 
+            success: true, 
+            audio_file: result.rows[0] 
+        });
+    } catch (err) {
+        console.error('Add audio file error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
+app.put('/api/audio-files/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { file_url, file_type, ipfs_cid } = req.body;
+    
+    if (!file_url || !file_type) {
+        return res.status(400).json({ error: 'file_url and file_type are required' });
+    }
+    
+    try {
+        const result = await pool.query(
+            'UPDATE metadata.audio_files SET file_url = $1, file_type = $2, ipfs_cid = $3 WHERE id = $4 RETURNING *',
+            [file_url, file_type, ipfs_cid || null, id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Audio file not found' });
+        }
+        
+        res.json({ 
+            success: true, 
+            audio_file: result.rows[0] 
+        });
+    } catch (err) {
+        console.error('Update audio file error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
+app.delete('/api/audio-files/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        const result = await pool.query(
+            'DELETE FROM metadata.audio_files WHERE id = $1 RETURNING file_url',
+            [id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Audio file not found' });
+        }
+        
+        res.json({ 
+            success: true, 
+            message: `Audio file deleted successfully` 
+        });
+    } catch (err) {
+        console.error('Delete audio file error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
 app.post('/api/songs/:songId/tokens/:tokenId/link', asyncHandler(async (req, res) => {
     const { songId, tokenId } = req.params;
     const { is_primary = false } = req.body;
     
     try {
-        const result = await pool.query(
-            'SELECT link_song_to_token($1, $2, $3)',
-            [songId, tokenId, is_primary]
+        await pool.query(
+            'INSERT INTO cip60.assets_songs (asset_id, song_id, is_primary) VALUES ($1, $2, $3) ON CONFLICT (asset_id, song_id) DO UPDATE SET is_primary = $3',
+            [tokenId, songId, is_primary]
         );
         
         res.json({ 
             success: true, 
-            message: result.rows[0].link_song_to_token 
+            message: 'Token linked to song successfully'
         });
     } catch (err) {
         console.error('Link token error:', err);
@@ -546,13 +648,17 @@ app.delete('/api/songs/:songId/tokens/:tokenId/unlink', asyncHandler(async (req,
     
     try {
         const result = await pool.query(
-            'SELECT unlink_song_from_token($1, $2)',
-            [songId, tokenId]
+            'DELETE FROM cip60.assets_songs WHERE asset_id = $1 AND song_id = $2',
+            [tokenId, songId]
         );
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Token link not found' });
+        }
         
         res.json({ 
             success: true, 
-            message: result.rows[0].unlink_song_from_token 
+            message: 'Token unlinked from song successfully'
         });
     } catch (err) {
         console.error('Unlink token error:', err);
