@@ -38,6 +38,7 @@ h1 {
     display: flex;
     border-bottom: 2px solid #e9ecef;
     margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .tab-button {
@@ -590,6 +591,56 @@ h1 {
     margin: 0 auto 10px;
 }
 
+.relations-section {
+    margin-top: 16px;
+    padding: 12px;
+    background: #e9ecef;
+    border-radius: 6px;
+}
+
+.relations-title {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 8px;
+}
+
+.relation-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.relation-item:last-child {
+    border-bottom: none;
+}
+
+.relation-info {
+    flex: 1;
+}
+
+.relation-type {
+    font-size: 11px;
+    color: #6c757d;
+    text-transform: uppercase;
+}
+
+.relation-name {
+    font-size: 13px;
+    color: #212529;
+}
+
+.id-field {
+    width: 150px;
+}
+
+.two-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -692,6 +743,10 @@ h1 {
         left: auto;
         margin-bottom: 10px;
     }
+    
+    .two-column {
+        grid-template-columns: 1fr;
+    }
 }
     </style>
 </head>
@@ -744,6 +799,26 @@ h1 {
                         <div class="quality-count" id="noDurationCount">-</div>
                         <p>Songs missing duration information</p>
                     </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-isrc')">
+                        <h4>Songs Without ISRC</h4>
+                        <div class="quality-count" id="noIsrcCount">-</div>
+                        <p>Songs missing ISRC codes</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-tokens')">
+                        <h4>Songs Without Tokens</h4>
+                        <div class="quality-count" id="noTokensCount">-</div>
+                        <p>Songs without blockchain tokens</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-artists')">
+                        <h4>Orphaned Artists</h4>
+                        <div class="quality-count" id="orphanArtistsCount">-</div>
+                        <p>Artists with no songs</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('no-iswc')">
+                        <h4>Songs Without ISWC</h4>
+                        <div class="quality-count" id="noIswcCount">-</div>
+                        <p>Songs missing ISWC codes</p>
+                    </div>
                     <div class="quality-card" onclick="loadDataIssues('orphan-artists')">
                         <h4>Orphaned Artists</h4>
                         <div class="quality-count" id="orphanArtistsCount">-</div>
@@ -753,6 +828,11 @@ h1 {
                         <h4>Orphaned Genres</h4>
                         <div class="quality-count" id="orphanGenresCount">-</div>
                         <p>Genres with no songs</p>
+                    </div>
+                    <div class="quality-card" onclick="loadDataIssues('orphan-contributors')">
+                        <h4>Orphaned Contributors</h4>
+                        <div class="quality-count" id="orphanContributorsCount">-</div>
+                        <p>Contributors with no songs</p>
                     </div>
                 </div>
                 <div id="issuesContainer" class="issues-container">
@@ -834,22 +914,40 @@ h1 {
                 </div>
             </div>
             
-            <div class="metadata-row">
-                <span class="metadata-label">Duration:</span>
-                <div class="metadata-value">
-                    <input type="text" id="bulkDuration" class="editable-field" placeholder="New duration (optional)">
+            <div class="two-column">
+                <div class="metadata-row">
+                    <span class="metadata-label">Duration:</span>
+                    <div class="metadata-value">
+                        <input type="text" id="bulkDuration" class="editable-field" placeholder="New duration (optional)">
+                    </div>
+                </div>
+                
+                <div class="metadata-row">
+                    <span class="metadata-label">Status:</span>
+                    <div class="metadata-value">
+                        <select id="bulkStatus" class="editable-field">
+                            <option value="">Keep current status</option>
+                            <option value="unverified">Unverified</option>
+                            <option value="verified">Verified</option>
+                            <option value="pending">Pending</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             
-            <div class="metadata-row">
-                <span class="metadata-label">Status:</span>
-                <div class="metadata-value">
-                    <select id="bulkStatus" class="editable-field">
-                        <option value="">Keep current status</option>
-                        <option value="unverified">Unverified</option>
-                        <option value="verified">Verified</option>
-                        <option value="pending">Pending</option>
-                    </select>
+            <div class="two-column">
+                <div class="metadata-row">
+                    <span class="metadata-label">ISRC:</span>
+                    <div class="metadata-value">
+                        <input type="text" id="bulkIsrc" class="editable-field" placeholder="ISRC code (optional)" maxlength="12">
+                    </div>
+                </div>
+                
+                <div class="metadata-row">
+                    <span class="metadata-label">ISWC:</span>
+                    <div class="metadata-value">
+                        <input type="text" id="bulkIswc" class="editable-field" placeholder="ISWC code (optional)" maxlength="11">
+                    </div>
                 </div>
             </div>
             
@@ -915,6 +1013,12 @@ class StateManager {
         const durationInput = card.querySelector('[data-field="duration"]');
         if (durationInput) durationInput.value = song.duration || '';
 
+        const isrcInput = card.querySelector('[data-field="isrc"]');
+        if (isrcInput) isrcInput.value = song.isrc || '';
+
+        const iswcInput = card.querySelector('[data-field="iswc"]');
+        if (iswcInput) iswcInput.value = song.iswc || '';
+
         const statusSelect = card.querySelector('[data-field="validation_status"]');
         if (statusSelect) statusSelect.value = song.validation_status;
 
@@ -941,8 +1045,12 @@ class StateManager {
         const placeholder = type === 'artist' ? 'Add artist...' : 'Add genre...';
         const containerId = type === 'artist' ? `artists-${songId}` : `genres-${songId}`;
         
+        const processedItems = type === 'artist' ? 
+            items.map(item => typeof item === 'object' ? item.name : item) :
+            items;
+        
         container.innerHTML = `
-            ${items.map(item => `
+            ${processedItems.map(item => `
                 <div class="tag">
                     ${escapeHtml(item)}
                     <span class="tag-remove" onclick="removeTag(this, ${songId})">×</span>
@@ -1059,8 +1167,12 @@ async function loadQualityCounts() {
             'noGenresCount': counts.no_genres || 0,
             'noAudioCount': counts.no_audio || 0,
             'noDurationCount': counts.no_duration || 0,
+            'noIsrcCount': counts.no_isrc || 0,
+            'noIswcCount': counts.no_iswc || 0,
+            'noTokensCount': counts.no_tokens || 0,
             'orphanArtistsCount': counts.orphan_artists || 0,
-            'orphanGenresCount': counts.orphan_genres || 0
+            'orphanGenresCount': counts.orphan_genres || 0,
+            'orphanContributorsCount': counts.orphan_contributors || 0
         };
         
         Object.entries(elements).forEach(([id, count]) => {
@@ -1119,7 +1231,8 @@ function displayIssues(issues, issueType) {
 }
 
 function createBulkActionsHTML(issueType) {
-    const entityType = issueType.includes('artists') ? 'artists' : 'genres';
+    const entityType = issueType.includes('artists') ? 'artists' : 
+                      issueType.includes('genres') ? 'genres' : 'contributors';
     return `
         <div class="bulk-actions" id="bulkActions">
             <div class="bulk-actions-header">
@@ -1291,7 +1404,8 @@ async function executeBulkDelete(issueType, ids) {
     closeBulkModal();
     
     try {
-        const endpoint = issueType.includes('artists') ? 'artists' : 'genres';
+        const endpoint = issueType.includes('artists') ? 'artists' : 
+                        issueType.includes('genres') ? 'genres' : 'contributors';
         const response = await fetch(`/api/${endpoint}/bulk-delete`, {
             method: 'DELETE',
             headers: {
@@ -1324,8 +1438,12 @@ function getIssueTitle(issueType) {
         'no-genres': 'Songs Without Genres', 
         'no-audio': 'Songs Without Audio Files',
         'no-duration': 'Songs Without Duration',
+        'no-isrc': 'Songs Without ISRC',
+        'no-iswc': 'Songs Without ISWC',
+        'no-tokens': 'Songs Without Tokens',
         'orphan-artists': 'Artists With No Songs',
-        'orphan-genres': 'Genres With No Songs'
+        'orphan-genres': 'Genres With No Songs',
+        'orphan-contributors': 'Contributors With No Songs'
     };
     return titles[issueType] || 'Data Issues';
 }
@@ -1382,7 +1500,8 @@ async function deleteOrphan(type, id, name) {
     showLoading();
     
     try {
-        const endpoint = type.includes('artists') ? 'artists' : 'genres';
+        const endpoint = type.includes('artists') ? 'artists' : 
+                        type.includes('genres') ? 'genres' : 'contributors';
         const response = await fetch(`/api/${endpoint}/${id}`, {
             method: 'DELETE'
         });
@@ -1636,6 +1755,8 @@ function openBulkEditModal() {
     document.getElementById('bulkTitle').value = '';
     document.getElementById('bulkDuration').value = '';
     document.getElementById('bulkStatus').value = '';
+    document.getElementById('bulkIsrc').value = '';
+    document.getElementById('bulkIswc').value = '';
     document.getElementById('bulkArtists').value = '';
     document.getElementById('bulkGenres').value = '';
     
@@ -1650,6 +1771,8 @@ async function applyBulkChanges() {
     const title = document.getElementById('bulkTitle').value.trim();
     const duration = document.getElementById('bulkDuration').value.trim();
     const status = document.getElementById('bulkStatus').value;
+    const isrc = document.getElementById('bulkIsrc').value.trim();
+    const iswc = document.getElementById('bulkIswc').value.trim();
     const artistsText = document.getElementById('bulkArtists').value.trim();
     const genresText = document.getElementById('bulkGenres').value.trim();
     
@@ -1657,6 +1780,8 @@ async function applyBulkChanges() {
     if (title) changes.title = title;
     if (duration) changes.duration = duration;
     if (status) changes.validation_status = status;
+    if (isrc) changes.isrc = isrc;
+    if (iswc) changes.iswc = iswc;
     if (artistsText) changes.artists = artistsText.split(',').map(a => a.trim()).filter(a => a);
     if (genresText) changes.genres = genresText.split(',').map(g => g.trim()).filter(g => g);
     
@@ -1749,6 +1874,12 @@ function createBulkEditHeader() {
 function createSongCard(song) {
     const artists = song.artists || [];
     const genres = song.genres || [];
+    const audioFiles = song.audio_files || [];
+    const tokens = song.tokens || [];
+    
+    const processedArtists = artists.map(artist => 
+        typeof artist === 'object' ? artist.name : artist
+    );
     
     return `
         <div class="song-card" data-song-id="${song.id}">
@@ -1769,7 +1900,7 @@ function createSongCard(song) {
                 <span class="metadata-label">Artists:</span>
                 <div class="metadata-value">
                     <div class="tag-container" id="artists-${song.id}" onchange="markChanged(${song.id})">
-                        ${artists.map(artist => `
+                        ${processedArtists.map(artist => `
                             <div class="tag">
                                 ${escapeHtml(artist)}
                                 <span class="tag-remove" onclick="removeTag(this, ${song.id})">×</span>
@@ -1797,25 +1928,73 @@ function createSongCard(song) {
                 </div>
             </div>
             
-            <div class="metadata-row">
-                <span class="metadata-label">Duration:</span>
-                <div class="metadata-value">
-                    <input type="text" class="editable-field" value="${song.duration || ''}" 
-                           style="width: 100px;" onchange="markChanged(${song.id})" data-field="duration">
+            <div class="two-column">
+                <div class="metadata-row">
+                    <span class="metadata-label">Duration:</span>
+                    <div class="metadata-value">
+                        <input type="text" class="editable-field" value="${song.duration || ''}" 
+                               onchange="markChanged(${song.id})" data-field="duration">
+                    </div>
+                </div>
+                
+                <div class="metadata-row">
+                    <span class="metadata-label">Status:</span>
+                    <div class="metadata-value">
+                        <span class="status-indicator status-${song.validation_status}"></span>
+                        <select class="editable-field" onchange="markChanged(${song.id})" data-field="validation_status">
+                            <option value="unverified" ${song.validation_status === 'unverified' ? 'selected' : ''}>Unverified</option>
+                            <option value="verified" ${song.validation_status === 'verified' ? 'selected' : ''}>Verified</option>
+                            <option value="pending" ${song.validation_status === 'pending' ? 'selected' : ''}>Pending</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             
-            <div class="metadata-row">
-                <span class="metadata-label">Status:</span>
-                <div class="metadata-value">
-                    <span class="status-indicator status-${song.validation_status}"></span>
-                    <select class="editable-field" style="width: 140px;" onchange="markChanged(${song.id})" data-field="validation_status">
-                        <option value="unverified" ${song.validation_status === 'unverified' ? 'selected' : ''}>Unverified</option>
-                        <option value="verified" ${song.validation_status === 'verified' ? 'selected' : ''}>Verified</option>
-                        <option value="pending" ${song.validation_status === 'pending' ? 'selected' : ''}>Pending</option>
-                    </select>
+            <div class="two-column">
+                <div class="metadata-row">
+                    <span class="metadata-label">ISRC:</span>
+                    <div class="metadata-value">
+                        <input type="text" class="editable-field id-field" value="${song.isrc || ''}" 
+                               onchange="markChanged(${song.id})" data-field="isrc" maxlength="12" placeholder="ISRC code">
+                    </div>
+                </div>
+                
+                <div class="metadata-row">
+                    <span class="metadata-label">ISWC:</span>
+                    <div class="metadata-value">
+                        <input type="text" class="editable-field id-field" value="${song.iswc || ''}" 
+                               onchange="markChanged(${song.id})" data-field="iswc" maxlength="11" placeholder="ISWC code">
+                    </div>
                 </div>
             </div>
+            
+            ${(audioFiles.length > 0 || tokens.length > 0) ? `
+            <div class="relations-section">
+                ${audioFiles.length > 0 ? `
+                <div class="relations-title">Audio Files (${audioFiles.length})</div>
+                ${audioFiles.map(file => `
+                    <div class="relation-item">
+                        <div class="relation-info">
+                            <div class="relation-type">${file.type}</div>
+                            <div class="relation-name">${escapeHtml(file.url)}</div>
+                        </div>
+                    </div>
+                `).join('')}
+                ` : ''}
+                
+                ${tokens.length > 0 ? `
+                <div class="relations-title">Blockchain Tokens (${tokens.length})</div>
+                ${tokens.map(token => `
+                    <div class="relation-item">
+                        <div class="relation-info">
+                            <div class="relation-type">${token.policy_id.substring(0, 8)}...</div>
+                            <div class="relation-name">${escapeHtml(token.name)}</div>
+                        </div>
+                    </div>
+                `).join('')}
+                ` : ''}
+            </div>
+            ` : ''}
             
             <div class="actions">
                 <button class="btn btn-primary" onclick="saveSong(${song.id})" id="save-${song.id}" disabled>
@@ -1884,6 +2063,16 @@ function detectChanges(songId) {
         changes.duration = durationInput.value;
     }
     
+    const isrcInput = card.querySelector('[data-field="isrc"]');
+    if (isrcInput && isrcInput.value !== (originalData[songId].isrc || '')) {
+        changes.isrc = isrcInput.value;
+    }
+    
+    const iswcInput = card.querySelector('[data-field="iswc"]');
+    if (iswcInput && iswcInput.value !== (originalData[songId].iswc || '')) {
+        changes.iswc = iswcInput.value;
+    }
+    
     const statusSelect = card.querySelector('[data-field="validation_status"]');
     if (statusSelect && statusSelect.value !== originalData[songId].validation_status) {
         changes.validation_status = statusSelect.value;
@@ -1892,7 +2081,9 @@ function detectChanges(songId) {
     const artistsContainer = document.getElementById(`artists-${songId}`);
     const currentArtists = Array.from(artistsContainer.querySelectorAll('.tag'))
         .map(tag => tag.textContent.replace('×', '').trim());
-    const originalArtists = originalData[songId].artists || [];
+    const originalArtists = (originalData[songId].artists || []).map(artist => 
+        typeof artist === 'object' ? artist.name : artist
+    );
     
     if (JSON.stringify(currentArtists.sort()) !== JSON.stringify(originalArtists.sort())) {
         changes.artists = currentArtists;
@@ -1916,7 +2107,7 @@ function showSaveModal(changes) {
     
     const tableUpdates = [];
     
-    if (changes.title || changes.duration || changes.validation_status) {
+    if (changes.title || changes.duration || changes.validation_status || changes.isrc || changes.iswc) {
         tableUpdates.push('metadata.songs table (basic info)');
     }
     

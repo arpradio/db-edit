@@ -18,16 +18,21 @@ const asyncHandler = (fn) => (req, res, next) => {
 app.get('/api/songs/search', asyncHandler(async (req, res) => {
     const { q = '' } = req.query;
     const query = `
-        SELECT DISTINCT s.id, s.title, s.duration, s.validation_status,
-               array_agg(DISTINCT a.name) FILTER (WHERE a.name IS NOT NULL) as artists,
-               array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL) as genres
+        SELECT DISTINCT s.id, s.title, s.duration, s.validation_status, s.isrc, s.iswc,
+               array_agg(DISTINCT jsonb_build_object('name', a.name, 'isni', a.isni)) FILTER (WHERE a.name IS NOT NULL) as artists,
+               array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL) as genres,
+               array_agg(DISTINCT jsonb_build_object('id', af.id, 'url', af.file_url, 'type', af.file_type)) FILTER (WHERE af.id IS NOT NULL) as audio_files,
+               array_agg(DISTINCT jsonb_build_object('id', ast.id, 'name', ast.asset_name, 'policy_id', ast.policy_id)) FILTER (WHERE ast.id IS NOT NULL) as tokens
         FROM metadata.songs s
         LEFT JOIN metadata.song_artists sa ON s.id = sa.song_id
         LEFT JOIN metadata.artists a ON sa.artist_id = a.id
         LEFT JOIN metadata.song_genres sg ON s.id = sg.song_id
         LEFT JOIN metadata.genres g ON sg.genre_id = g.id
+        LEFT JOIN metadata.audio_files af ON s.id = af.song_id
+        LEFT JOIN cip60.assets_songs asongs ON s.id = asongs.song_id
+        LEFT JOIN cip60.assets ast ON asongs.asset_id = ast.id
         WHERE s.title ILIKE $1 OR a.name ILIKE $1 OR g.name ILIKE $1
-        GROUP BY s.id, s.title, s.duration, s.validation_status
+        GROUP BY s.id, s.title, s.duration, s.validation_status, s.isrc, s.iswc
         ORDER BY s.title
         LIMIT 50
     `;
@@ -39,7 +44,7 @@ app.get('/api/songs/search', asyncHandler(async (req, res) => {
 app.get('/api/artists/search', asyncHandler(async (req, res) => {
     const { q } = req.query;
     const result = await pool.query(
-        'SELECT id, name FROM metadata.artists WHERE name ILIKE $1 ORDER BY name LIMIT 20',
+        'SELECT id, name, isni FROM metadata.artists WHERE name ILIKE $1 ORDER BY name LIMIT 20',
         [`%${q}%`]
     );
     res.json(result.rows);
@@ -54,20 +59,34 @@ app.get('/api/genres/search', asyncHandler(async (req, res) => {
     res.json(result.rows);
 }));
 
+app.get('/api/contributors/search', asyncHandler(async (req, res) => {
+    const { q } = req.query;
+    const result = await pool.query(
+        'SELECT id, name, isni, ipi FROM metadata.contributor WHERE name ILIKE $1 ORDER BY name LIMIT 20',
+        [`%${q}%`]
+    );
+    res.json(result.rows);
+}));
+
 app.get('/api/songs/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     
     const songQuery = `
-        SELECT s.id, s.title, s.duration, s.validation_status,
-               array_agg(DISTINCT a.name) FILTER (WHERE a.name IS NOT NULL) as artists,
-               array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL) as genres
+        SELECT s.id, s.title, s.duration, s.validation_status, s.isrc, s.iswc,
+               array_agg(DISTINCT jsonb_build_object('name', a.name, 'isni', a.isni)) FILTER (WHERE a.name IS NOT NULL) as artists,
+               array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL) as genres,
+               array_agg(DISTINCT jsonb_build_object('id', af.id, 'url', af.file_url, 'type', af.file_type, 'ipfs_cid', af.ipfs_cid)) FILTER (WHERE af.id IS NOT NULL) as audio_files,
+               array_agg(DISTINCT jsonb_build_object('id', ast.id, 'name', ast.asset_name, 'policy_id', ast.policy_id, 'release_title', ast.release_title)) FILTER (WHERE ast.id IS NOT NULL) as tokens
         FROM metadata.songs s
         LEFT JOIN metadata.song_artists sa ON s.id = sa.song_id
         LEFT JOIN metadata.artists a ON sa.artist_id = a.id
         LEFT JOIN metadata.song_genres sg ON s.id = sg.song_id
         LEFT JOIN metadata.genres g ON sg.genre_id = g.id
+        LEFT JOIN metadata.audio_files af ON s.id = af.song_id
+        LEFT JOIN cip60.assets_songs asongs ON s.id = asongs.song_id
+        LEFT JOIN cip60.assets ast ON asongs.asset_id = ast.id
         WHERE s.id = $1
-        GROUP BY s.id, s.title, s.duration, s.validation_status
+        GROUP BY s.id, s.title, s.duration, s.validation_status, s.isrc, s.iswc
     `;
     
     const result = await pool.query(songQuery, [id]);
@@ -133,12 +152,14 @@ app.post('/api/songs/:id/update', asyncHandler(async (req, res) => {
 }));
 
 async function updateSongData(client, songId, changes) {
-    const { artists, genres, title, duration, validation_status } = changes;
+    const { artists, genres, title, duration, validation_status, isrc, iswc } = changes;
     
     const songUpdates = {};
     if (title !== undefined) songUpdates.title = title;
     if (duration !== undefined) songUpdates.duration = duration;
     if (validation_status !== undefined) songUpdates.validation_status = validation_status;
+    if (isrc !== undefined) songUpdates.isrc = isrc;
+    if (iswc !== undefined) songUpdates.iswc = iswc;
     
     if (Object.keys(songUpdates).length > 0) {
         const updateFields = Object.keys(songUpdates).map((key, index) => `${key} = $${index + 2}`).join(', ');
@@ -155,6 +176,7 @@ async function updateSongData(client, songId, changes) {
         
         for (const artistData of artists) {
             const artistName = typeof artistData === 'string' ? artistData : artistData.name;
+            const artistIsni = typeof artistData === 'object' ? artistData.isni : null;
             const role = typeof artistData === 'object' ? artistData.role || 'primary' : 'primary';
             
             let artistResult = await client.query(
@@ -164,8 +186,13 @@ async function updateSongData(client, songId, changes) {
             
             if (artistResult.rows.length === 0) {
                 artistResult = await client.query(
-                    'INSERT INTO metadata.artists (name) VALUES ($1) RETURNING id',
-                    [artistName]
+                    'INSERT INTO metadata.artists (name, isni) VALUES ($1, $2) RETURNING id',
+                    [artistName, artistIsni]
+                );
+            } else if (artistIsni) {
+                await client.query(
+                    'UPDATE metadata.artists SET isni = $1 WHERE id = $2',
+                    [artistIsni, artistResult.rows[0].id]
                 );
             }
             
@@ -216,19 +243,16 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
     const queries = {
         'no-artists': 'SELECT * FROM find_songs_without_artists(100)',
         'no-genres': 'SELECT * FROM find_songs_without_genres(100)',
-        'no-audio': `
+        'no-audio': 'SELECT * FROM find_songs_without_audio(100)',
+        'no-duration': 'SELECT * FROM find_songs_without_duration(100)',
+        'no-isrc': 'SELECT * FROM find_songs_without_isrc(100)',
+        'no-iswc': `
             SELECT s.id as song_id, s.title as song_title
             FROM metadata.songs s
-            LEFT JOIN metadata.audio_files af ON s.id = af.song_id
-            WHERE af.song_id IS NULL
+            WHERE s.iswc IS NULL OR trim(s.iswc) = ''
             ORDER BY s.title LIMIT 100
         `,
-        'no-duration': `
-            SELECT s.id as song_id, s.title as song_title
-            FROM metadata.songs s
-            WHERE s.duration IS NULL OR trim(s.duration) = ''
-            ORDER BY s.title LIMIT 100
-        `,
+        'no-tokens': 'SELECT * FROM find_songs_without_tokens(100)',
         'orphan-artists': `
             SELECT a.id, a.name
             FROM metadata.artists a
@@ -242,6 +266,11 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
             LEFT JOIN metadata.song_genres sg ON g.id = sg.genre_id
             WHERE sg.genre_id IS NULL
             ORDER BY g.name LIMIT 100
+        `,
+        'orphan-contributors': `
+            SELECT c.id, c.name
+            FROM metadata.contributor c
+            ORDER BY c.name LIMIT 100
         `
     };
     
@@ -489,6 +518,183 @@ app.delete('/api/songs/:id', asyncHandler(async (req, res) => {
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
+    }
+}));
+
+app.post('/api/songs/:songId/tokens/:tokenId/link', asyncHandler(async (req, res) => {
+    const { songId, tokenId } = req.params;
+    const { is_primary = false } = req.body;
+    
+    try {
+        const result = await pool.query(
+            'SELECT link_song_to_token($1, $2, $3)',
+            [songId, tokenId, is_primary]
+        );
+        
+        res.json({ 
+            success: true, 
+            message: result.rows[0].link_song_to_token 
+        });
+    } catch (err) {
+        console.error('Link token error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
+app.delete('/api/songs/:songId/tokens/:tokenId/unlink', asyncHandler(async (req, res) => {
+    const { songId, tokenId } = req.params;
+    
+    try {
+        const result = await pool.query(
+            'SELECT unlink_song_from_token($1, $2)',
+            [songId, tokenId]
+        );
+        
+        res.json({ 
+            success: true, 
+            message: result.rows[0].unlink_song_from_token 
+        });
+    } catch (err) {
+        console.error('Unlink token error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
+app.get('/api/tokens/search', asyncHandler(async (req, res) => {
+    const { q } = req.query;
+    const result = await pool.query(
+        'SELECT id, asset_name, policy_id, release_title FROM cip60.assets WHERE asset_name ILIKE $1 OR release_title ILIKE $1 ORDER BY asset_name LIMIT 20',
+        [`%${q}%`]
+    );
+    res.json(result.rows);
+}));
+
+app.get('/api/contributors', asyncHandler(async (req, res) => {
+    const { page = 1, limit = 50, search = '' } = req.query;
+    const offset = (page - 1) * limit;
+    
+    const whereClause = search ? 'WHERE name ILIKE $1' : '';
+    const values = search ? [`%${search}%`] : [];
+    
+    const result = await pool.query(
+        `SELECT id, name, ipi, isni FROM metadata.contributor ${whereClause} ORDER BY name LIMIT ${values.length + 1} OFFSET ${values.length + 2}`,
+        [...values, limit, offset]
+    );
+    
+    res.json(result.rows);
+}));
+
+app.post('/api/contributors', asyncHandler(async (req, res) => {
+    const { name, ipi, isni } = req.body;
+    
+    if (!name) {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+    
+    try {
+        const result = await pool.query(
+            'INSERT INTO metadata.contributor (name, ipi, isni) VALUES ($1, $2, $3) RETURNING *',
+            [name, ipi || null, isni || null]
+        );
+        
+        res.json({ 
+            success: true, 
+            contributor: result.rows[0] 
+        });
+    } catch (err) {
+        console.error('Create contributor error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
+app.put('/api/contributors/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { name, ipi, isni } = req.body;
+    
+    if (!name) {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+    
+    try {
+        const result = await pool.query(
+            'UPDATE metadata.contributor SET name = $1, ipi = $2, isni = $3 WHERE id = $4 RETURNING *',
+            [name, ipi || null, isni || null, id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Contributor not found' });
+        }
+        
+        res.json({ 
+            success: true, 
+            contributor: result.rows[0] 
+        });
+    } catch (err) {
+        console.error('Update contributor error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
+app.delete('/api/contributors/bulk-delete', asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        
+        const { ids } = req.body;
+        
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            throw new Error('Invalid or empty IDs array');
+        }
+        
+        const namesResult = await client.query(
+            'SELECT name FROM metadata.contributor WHERE id = ANY($1)',
+            [ids]
+        );
+        
+        const deleteResult = await client.query(
+            'DELETE FROM metadata.contributor WHERE id = ANY($1)',
+            [ids]
+        );
+        
+        await client.query('COMMIT');
+        
+        res.json({ 
+            success: true, 
+            message: `Successfully deleted ${deleteResult.rowCount} contributors`,
+            deletedCount: deleteResult.rowCount,
+            deletedNames: namesResult.rows.map(row => row.name)
+        });
+        
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Bulk delete contributors error:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+}));
+
+app.delete('/api/contributors/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        const result = await pool.query(
+            'DELETE FROM metadata.contributor WHERE id = $1 RETURNING name',
+            [id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Contributor not found' });
+        }
+        
+        res.json({ 
+            success: true, 
+            message: `Contributor "${result.rows[0].name}" deleted successfully` 
+        });
+    } catch (err) {
+        console.error('Delete contributor error:', err);
+        res.status(500).json({ error: err.message });
     }
 }));
 
