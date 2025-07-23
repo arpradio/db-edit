@@ -34,66 +34,101 @@
         </div>
 
         <div id="qualityTab" class="tab-content">
-            <div class="quality-section">
-                <h3>Data Quality Issues</h3>
-                <div class="quality-grid">
-                    <div class="quality-card" onclick="loadDataIssues('no-artists')">
-                        <h4>Songs Without Artists</h4>
-                        <div class="quality-count" id="noArtistsCount">-</div>
-                        <p>Songs missing artist information</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('no-genres')">
-                        <h4>Songs Without Genres</h4>
-                        <div class="quality-count" id="noGenresCount">-</div>
-                        <p>Songs missing genre classification</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('no-audio')">
-                        <h4>Songs Without Audio</h4>
-                        <div class="quality-count" id="noAudioCount">-</div>
-                        <p>Songs missing audio files</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('no-duration')">
-                        <h4>Songs Without Duration</h4>
-                        <div class="quality-count" id="noDurationCount">-</div>
-                        <p>Songs missing duration information</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('no-isrc')">
-                        <h4>Songs Without ISRC</h4>
-                        <div class="quality-count" id="noIsrcCount">-</div>
-                        <p>Songs missing ISRC codes</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('no-tokens')">
-                        <h4>Songs Without Tokens</h4>
-                        <div class="quality-count" id="noTokensCount">-</div>
-                        <p>Songs without blockchain tokens</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('orphan-artists')">
-                        <h4>Orphaned Artists</h4>
-                        <div class="quality-count" id="orphanArtistsCount">-</div>
-                        <p>Artists with no songs</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('no-iswc')">
-                        <h4>Songs Without ISWC</h4>
-                        <div class="quality-count" id="noIswcCount">-</div>
-                        <p>Songs missing ISWC codes</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('orphan-genres')">
-                        <h4>Orphaned Genres</h4>
-                        <div class="quality-count" id="orphanGenresCount">-</div>
-                        <p>Genres with no songs</p>
-                    </div>
-                    <div class="quality-card" onclick="loadDataIssues('orphan-contributors')">
-                        <h4>Orphaned Contributors</h4>
-                        <div class="quality-count" id="orphanContributorsCount">-</div>
-                        <p>Contributors with no songs</p>
-                    </div>
-                </div>
-                <div id="issuesContainer" class="issues-container">
-                    <div class="empty-state">
-                        <p>Click on a data quality card above to view issues</p>
-                    </div>
-                </div>
-            </div>
+        <div class="quality-section">
+    <h3>Data Quality Issues</h3>
+    <div class="quality-grid">
+        <div class="quality-card" onclick="loadDataIssues('no-artists')">
+            <h4>Songs Without Artists</h4>
+            <div class="quality-count" id="noArtistsCount">-</div>
+            <p>Songs missing artist information</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-genres')">
+            <h4>Songs Without Genres</h4>
+            <div class="quality-count" id="noGenresCount">-</div>
+            <p>Songs missing genre classification</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-audio')">
+            <h4>Songs Without Audio</h4>
+            <div class="quality-count" id="noAudioCount">-</div>
+            <p>Songs missing audio files</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-duration')">
+            <h4>Songs Without Duration</h4>
+            <div class="quality-count" id="noDurationCount">-</div>
+            <p>Songs missing duration information</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-isrc')">
+            <h4>Songs Without ISRC</h4>
+            <div class="quality-count" id="noIsrcCount">-</div>
+            <p>Songs missing ISRC codes</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-iswc')">
+            <h4>Songs Without ISWC</h4>
+            <div class="quality-count" id="noIswcCount">-</div>
+            <p>Songs missing ISWC codes</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-tokens')">
+            <h4>Songs Without Tokens</h4>
+            <div class="quality-count" id="noTokensCount">-</div>
+            <p>Songs without blockchain tokens</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-copyright')">
+            <h4>Songs Without Copyright</h4>
+            <div class="quality-count" id="noCopyrightCount">-</div>
+            <p>Songs missing copyright information</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('no-images')">
+            <h4>Songs Without Images</h4>
+            <div class="quality-count" id="noImagesCount">-</div>
+            <p>Songs without artwork/images</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('orphan-artists')">
+            <h4>Orphaned Artists</h4>
+            <div class="quality-count" id="orphanArtistsCount">-</div>
+            <p>Artists with no songs</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('orphan-genres')">
+            <h4>Orphaned Genres</h4>
+            <div class="quality-count" id="orphanGenresCount">-</div>
+            <p>Genres with no songs</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('orphan-contributors')">
+            <h4>Orphaned Contributors</h4>
+            <div class="quality-count" id="orphanContributorsCount">-</div>
+            <p>Contributors with no songs</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('orphan-tokens')">
+            <h4>Orphaned Tokens</h4>
+            <div class="quality-count" id="orphanTokensCount">-</div>
+            <p>Tokens with no songs</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('orphan-images')">
+            <h4>Orphaned Images</h4>
+            <div class="quality-count" id="orphanImagesCount">-</div>
+            <p>Images with no assets</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('unprocessed-tokens')">
+            <h4>Unprocessed Tokens</h4>
+            <div class="quality-count" id="unprocessedTokensCount">-</div>
+            <p>Tokens not yet processed</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('failed-tokens')">
+            <h4>Failed Tokens</h4>
+            <div class="quality-count" id="failedTokensCount">-</div>
+            <p>Tokens that failed processing</p>
+        </div>
+        <div class="quality-card" onclick="loadDataIssues('artists-no-isni')">
+            <h4>Artists Without ISNI</h4>
+            <div class="quality-count" id="artistsNoIsniCount">-</div>
+            <p>Artists missing ISNI codes</p>
+        </div>
+    </div>
+    <div id="issuesContainer" class="issues-container">
+        <div class="empty-state">
+            <p>Click on a data quality card above to view issues</p>
+        </div>
+    </div>
+</div>
         </div>
 
         <div id="statsTab" class="tab-content">

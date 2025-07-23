@@ -90,19 +90,31 @@ async function loadQualityCounts() {
         const response = await fetch('/api/quality/counts');
         const counts = await response.json();
         
-        document.getElementById('noArtistsCount').textContent = counts.no_artists || 0;
-        document.getElementById('noGenresCount').textContent = counts.no_genres || 0;
-        document.getElementById('noAudioCount').textContent = counts.no_audio || 0;
-        document.getElementById('noDurationCount').textContent = counts.no_duration || 0;
-        document.getElementById('orphanArtistsCount').textContent = counts.orphan_artists || 0;
-        document.getElementById('orphanGenresCount').textContent = counts.orphan_genres || 0;
+        const elements = {
+            'noArtistsCount': counts.no_artists || 0,
+            'noGenresCount': counts.no_genres || 0,
+            'noAudioCount': counts.no_audio || 0,
+            'noDurationCount': counts.no_duration || 0,
+            'noIsrcCount': counts.no_isrc || 0,
+            'noIswcCount': counts.no_iswc || 0,
+            'noTokensCount': counts.no_tokens || 0,
+            'noCopyrightCount': counts.no_copyright || 0,
+            'noImagesCount': counts.no_images || 0,
+            'orphanArtistsCount': counts.orphan_artists || 0,
+            'orphanGenresCount': counts.orphan_genres || 0,
+            'orphanContributorsCount': counts.orphan_contributors || 0,
+            'orphanTokensCount': counts.orphan_tokens || 0,
+            'orphanImagesCount': counts.orphan_images || 0,
+            'unprocessedTokensCount': counts.unprocessed_tokens || 0,
+            'failedTokensCount': counts.failed_tokens || 0,
+            'artistsNoIsniCount': counts.artists_no_isni || 0
+        };
         
-        document.querySelectorAll('.quality-count').forEach(el => {
-            const count = parseInt(el.textContent);
-            if (count === 0) {
-                el.classList.add('zero');
-            } else {
-                el.classList.remove('zero');
+        Object.entries(elements).forEach(([id, count]) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = count;
+                element.classList.toggle('zero', count === 0);
             }
         });
         
@@ -154,7 +166,16 @@ function displayIssues(issues, issueType) {
 }
 
 function createBulkActionsHTML(issueType) {
-    const entityType = issueType.includes('artists') ? 'artists' : 'genres';
+    const entityMap = {
+        'orphan-artists': 'artists',
+        'orphan-genres': 'genres', 
+        'orphan-contributors': 'contributors',
+        'orphan-tokens': 'tokens',
+        'orphan-images': 'images'
+    };
+    
+    const entityType = entityMap[issueType] || 'items';
+    
     return `
         <div class="bulk-actions" id="bulkActions">
             <div class="bulk-actions-header">
@@ -162,6 +183,8 @@ function createBulkActionsHTML(issueType) {
                 <div class="bulk-buttons">
                     <button class="btn btn-small btn-danger" onclick="bulkDeleteSelected()">Delete Selected</button>
                     <button class="btn btn-small btn-danger" onclick="bulkDeleteAll('${issueType}')">Delete All ${entityType}</button>
+                    ${issueType === 'unprocessed-tokens' ? '<button class="btn btn-small btn-primary" onclick="bulkProcessTokens()">Process Selected</button>' : ''}
+                    ${issueType === 'artists-no-isni' ? '<button class="btn btn-small btn-primary" onclick="bulkEditIsni()">Add ISNI</button>' : ''}
                 </div>
             </div>
         </div>
@@ -177,6 +200,94 @@ function createSelectAllHTML() {
     `;
 }
 
+async function processToken(tokenId, tokenName) {
+    try {
+        const response = await fetch(`/api/tokens/${tokenId}/process`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(`Token "${tokenName}" marked as processed`, 'success');
+            await loadDataIssues(currentIssueType);
+            await loadQualityCounts();
+        } else {
+            throw new Error(result.error || 'Failed to process token');
+        }
+    } catch (error) {
+        console.error('Process token error:', error);
+        showMessage(`Failed to process token: ${error.message}`, 'error');
+    }
+}
+
+async function bulkProcessTokens() {
+    if (selectedItems.size === 0) {
+        showMessage('No tokens selected', 'info');
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        const promises = Array.from(selectedItems).map(tokenId => 
+            fetch(`/api/tokens/${tokenId}/process`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+        );
+        
+        await Promise.all(promises);
+        
+        showMessage(`Successfully processed ${selectedItems.size} tokens`, 'success');
+        selectedItems.clear();
+        await loadDataIssues(currentIssueType);
+        await loadQualityCounts();
+    } catch (error) {
+        console.error('Bulk process error:', error);
+        showMessage(`Failed to process tokens: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function editArtistIsni(artistId, artistName) {
+    const isni = prompt(`Enter ISNI code for "${artistName}":`, '');
+    
+    if (isni === null || isni.trim() === '') {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/artists/${artistId}/isni`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ isni: isni.trim() })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(`ISNI updated for "${artistName}"`, 'success');
+            await loadDataIssues(currentIssueType);
+            await loadQualityCounts();
+        } else {
+            throw new Error(result.error || 'Failed to update ISNI');
+        }
+    } catch (error) {
+        console.error('Update ISNI error:', error);
+        showMessage(`Failed to update ISNI: ${error.message}`, 'error');
+    }
+}
+
+
 function createIssueItem(issue, issueType) {
     if (issueType.includes('songs') || issueType.includes('no-')) {
         return `
@@ -190,20 +301,34 @@ function createIssueItem(issue, issueType) {
                 </div>
             </div>
         `;
-    } else {
+    } else if (issueType.includes('orphan') || issueType.includes('unprocessed') || issueType.includes('failed') || issueType.includes('artists-no-isni')) {
+        let actionButtons = `<button class="btn btn-small btn-danger" onclick="deleteOrphan('${issueType}', ${issue.id}, '${escapeHtml(issue.name)}')">Delete</button>`;
+        
+        if (issueType === 'unprocessed-tokens') {
+            actionButtons += `<button class="btn btn-small btn-primary" onclick="processToken(${issue.id}, '${escapeHtml(issue.name)}')">Process</button>`;
+        }
+        
+        if (issueType === 'artists-no-isni') {
+            actionButtons = `<button class="btn btn-small btn-primary" onclick="editArtistIsni(${issue.id}, '${escapeHtml(issue.name)}')">Add ISNI</button>` + actionButtons;
+        }
+        
         return `
             <div class="issue-item" data-item-id="${issue.id}">
                 <div class="issue-content">
                     <input type="checkbox" class="issue-checkbox" data-item-id="${issue.id}" onchange="toggleItemSelection(${issue.id})">
                     <span class="issue-title">${escapeHtml(issue.name)}</span>
                     <span class="issue-id">ID: ${issue.id}</span>
+                    ${issue.policy_id ? `<span class="issue-meta">Policy: ${escapeHtml(issue.policy_id.substring(0, 8))}...</span>` : ''}
+                    ${issue.image_type ? `<span class="issue-meta">Type: ${escapeHtml(issue.image_type)}</span>` : ''}
                 </div>
                 <div class="issue-actions">
-                    <button class="btn btn-small btn-danger" onclick="deleteOrphan('${issueType}', ${issue.id}, '${escapeHtml(issue.name)}')">Delete</button>
+                    ${actionButtons}
                 </div>
             </div>
         `;
     }
+    
+    return '';
 }
 
 function toggleItemSelection(itemId) {
@@ -330,7 +455,15 @@ async function executeBulkDelete(issueType, ids) {
     closeBulkModal();
     
     try {
-        const endpoint = issueType.includes('artists') ? 'artists' : 'genres';
+        const endpointMap = {
+            'orphan-artists': 'artists',
+            'orphan-genres': 'genres',
+            'orphan-contributors': 'contributors',
+            'orphan-tokens': 'tokens',
+            'orphan-images': 'images'
+        };
+        
+        const endpoint = endpointMap[issueType] || 'items';
         const response = await fetch(`/api/${endpoint}/bulk-delete`, {
             method: 'DELETE',
             headers: {
@@ -344,8 +477,8 @@ async function executeBulkDelete(issueType, ids) {
         if (response.ok) {
             showMessage(`Successfully deleted ${ids.length} items`, 'success');
             selectedItems.clear();
-            loadDataIssues(currentIssueType);
-            loadQualityCounts();
+            await loadDataIssues(currentIssueType);
+            await loadQualityCounts();
         } else {
             throw new Error(result.error || 'Failed to delete items');
         }
@@ -357,14 +490,26 @@ async function executeBulkDelete(issueType, ids) {
     }
 }
 
+
 function getIssueTitle(issueType) {
     const titles = {
         'no-artists': 'Songs Without Artists',
         'no-genres': 'Songs Without Genres', 
         'no-audio': 'Songs Without Audio Files',
         'no-duration': 'Songs Without Duration',
+        'no-isrc': 'Songs Without ISRC',
+        'no-iswc': 'Songs Without ISWC',
+        'no-tokens': 'Songs Without Tokens',
+        'no-copyright': 'Songs Without Copyright',
+        'no-images': 'Songs Without Images',
         'orphan-artists': 'Artists With No Songs',
-        'orphan-genres': 'Genres With No Songs'
+        'orphan-genres': 'Genres With No Songs',
+        'orphan-contributors': 'Contributors With No Songs',
+        'orphan-tokens': 'Tokens With No Songs',
+        'orphan-images': 'Images With No Assets',
+        'unprocessed-tokens': 'Unprocessed Tokens',
+        'failed-tokens': 'Failed Tokens',
+        'artists-no-isni': 'Artists Without ISNI'
     };
     return titles[issueType] || 'Data Issues';
 }

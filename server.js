@@ -62,7 +62,7 @@ app.get('/api/genres/search', asyncHandler(async (req, res) => {
 app.get('/api/contributors/search', asyncHandler(async (req, res) => {
     const { q } = req.query;
     const result = await pool.query(
-        'SELECT id, name, isni, ipi FROM metadata.contributor WHERE name ILIKE $1 ORDER BY name LIMIT 20',
+        'SELECT id, name, isni, ipi FROM metadata.contributors WHERE name ILIKE $1 ORDER BY name LIMIT 20',
         [`%${q}%`]
     );
     res.json(result.rows);
@@ -275,6 +275,8 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
             WHERE asongs.song_id IS NULL
             ORDER BY s.title LIMIT 100
         `,
+        'no-copyright': 'SELECT * FROM find_songs_without_copyright(100)',
+        'no-images': 'SELECT * FROM find_songs_without_images(100)',
         'orphan-artists': `
             SELECT a.id, a.name
             FROM metadata.artists a
@@ -293,7 +295,12 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
             SELECT c.id, c.name
             FROM metadata.contributor c
             ORDER BY c.name LIMIT 100
-        `
+        `,
+        'orphan-tokens': 'SELECT * FROM find_tokens_without_songs(100)',
+        'orphan-images': 'SELECT * FROM find_orphaned_images(100)',
+        'unprocessed-tokens': 'SELECT * FROM find_unprocessed_tokens(100)',
+        'failed-tokens': 'SELECT * FROM find_failed_tokens(100)',
+        'artists-no-isni': 'SELECT * FROM find_artists_without_isni(100)'
     };
     
     query = queries[type];
@@ -307,6 +314,15 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
         const normalizedRows = result.rows.map(row => {
             if (row.song_id && row.song_title) {
                 return { id: row.song_id, title: row.song_title };
+            }
+            if (row.token_id && row.token_name) {
+                return { id: row.token_id, name: row.token_name, policy_id: row.policy_id, release_title: row.release_title };
+            }
+            if (row.image_id && row.image_url) {
+                return { id: row.image_id, name: row.image_url, image_type: row.image_type };
+            }
+            if (row.artist_id && row.artist_name) {
+                return { id: row.artist_id, name: row.artist_name };
             }
             return row;
         });
@@ -467,6 +483,199 @@ app.delete('/api/genres/:id', asyncHandler(async (req, res) => {
         'genre_id'
     );
     res.json({ success: true, message: `Genre "${name}" deleted successfully` });
+}));
+
+app.delete('/api/tokens/bulk-delete', asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        
+        const { ids } = req.body;
+        
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            throw new Error('Invalid or empty IDs array');
+        }
+        
+        const checkResult = await client.query(
+            'SELECT asset_id FROM cip60.assets_songs WHERE asset_id = ANY($1) LIMIT 1',
+            [ids]
+        );
+        
+        if (checkResult.rows.length > 0) {
+            throw new Error('Cannot delete tokens with associated songs');
+        }
+        
+        const namesResult = await client.query(
+            'SELECT asset_name FROM cip60.assets WHERE id = ANY($1)',
+            [ids]
+        );
+        
+        const deleteResult = await client.query(
+            'DELETE FROM cip60.assets WHERE id = ANY($1)',
+            [ids]
+        );
+        
+        await client.query('COMMIT');
+        
+        res.json({ 
+            success: true, 
+            message: `Successfully deleted ${deleteResult.rowCount} tokens`,
+            deletedCount: deleteResult.rowCount,
+            deletedNames: namesResult.rows.map(row => row.asset_name)
+        });
+        
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Bulk delete tokens error:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+}));
+
+app.delete('/api/tokens/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const checkResult = await pool.query(
+        'SELECT count(*) FROM cip60.assets_songs WHERE asset_id = $1',
+        [id]
+    );
+    
+    if (parseInt(checkResult.rows[0].count) > 0) {
+        throw new Error('Cannot delete token with associated songs');
+    }
+    
+    const result = await pool.query(
+        'DELETE FROM cip60.assets WHERE id = $1 RETURNING asset_name',
+        [id]
+    );
+    
+    if (result.rows.length === 0) {
+        throw new Error('Token not found');
+    }
+    
+    res.json({ success: true, message: `Token "${result.rows[0].asset_name}" deleted successfully` });
+}));
+
+app.delete('/api/images/bulk-delete', asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        
+        const { ids } = req.body;
+        
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            throw new Error('Invalid or empty IDs array');
+        }
+        
+        const checkResult = await client.query(
+            'SELECT image_id FROM metadata.asset_images WHERE image_id = ANY($1) LIMIT 1',
+            [ids]
+        );
+        
+        if (checkResult.rows.length > 0) {
+            throw new Error('Cannot delete images with associated assets');
+        }
+        
+        const namesResult = await client.query(
+            'SELECT image_url FROM metadata.images WHERE id = ANY($1)',
+            [ids]
+        );
+        
+        const deleteResult = await client.query(
+            'DELETE FROM metadata.images WHERE id = ANY($1)',
+            [ids]
+        );
+        
+        await client.query('COMMIT');
+        
+        res.json({ 
+            success: true, 
+            message: `Successfully deleted ${deleteResult.rowCount} images`,
+            deletedCount: deleteResult.rowCount,
+            deletedNames: namesResult.rows.map(row => row.image_url || 'Untitled Image')
+        });
+        
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Bulk delete images error:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+}));
+
+app.delete('/api/images/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const checkResult = await pool.query(
+        'SELECT count(*) FROM metadata.asset_images WHERE image_id = $1',
+        [id]
+    );
+    
+    if (parseInt(checkResult.rows[0].count) > 0) {
+        throw new Error('Cannot delete image with associated assets');
+    }
+    
+    const result = await pool.query(
+        'DELETE FROM metadata.images WHERE id = $1 RETURNING image_url',
+        [id]
+    );
+    
+    if (result.rows.length === 0) {
+        throw new Error('Image not found');
+    }
+    
+    res.json({ success: true, message: `Image deleted successfully` });
+}));
+
+app.post('/api/tokens/:id/process', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        await pool.query(
+            'INSERT INTO cip60.processing_status (asset_id, status, has_valid_songs) VALUES ($1, $2, $3) ON CONFLICT (asset_id) DO UPDATE SET status = $2, has_valid_songs = $3, processed_at = CURRENT_TIMESTAMP',
+            [id, 'processed', true]
+        );
+        
+        res.json({ 
+            success: true, 
+            message: 'Token marked as processed'
+        });
+    } catch (err) {
+        console.error('Process token error:', err);
+        res.status(500).json({ error: err.message });
+    }
+}));
+
+app.put('/api/artists/:id/isni', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { isni } = req.body;
+    
+    if (!isni || isni.trim().length === 0) {
+        return res.status(400).json({ error: 'ISNI is required' });
+    }
+    
+    try {
+        const result = await pool.query(
+            'UPDATE metadata.artists SET isni = $1 WHERE id = $2 RETURNING name',
+            [isni.trim(), id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Artist not found' });
+        }
+        
+        res.json({ 
+            success: true, 
+            message: `ISNI updated for artist "${result.rows[0].name}"`
+        });
+    } catch (err) {
+        console.error('Update ISNI error:', err);
+        res.status(500).json({ error: err.message });
+    }
 }));
 
 app.delete('/api/songs/bulk-delete', asyncHandler(async (req, res) => {
@@ -683,7 +892,7 @@ app.get('/api/contributors', asyncHandler(async (req, res) => {
     const values = search ? [`%${search}%`] : [];
     
     const result = await pool.query(
-        `SELECT id, name, ipi, isni FROM metadata.contributor ${whereClause} ORDER BY name LIMIT ${values.length + 1} OFFSET ${values.length + 2}`,
+        `SELECT id, name, ipi, isni FROM metadata.contributors ${whereClause} ORDER BY name LIMIT ${values.length + 1} OFFSET ${values.length + 2}`,
         [...values, limit, offset]
     );
     
@@ -699,7 +908,7 @@ app.post('/api/contributors', asyncHandler(async (req, res) => {
     
     try {
         const result = await pool.query(
-            'INSERT INTO metadata.contributor (name, ipi, isni) VALUES ($1, $2, $3) RETURNING *',
+            'INSERT INTO metadata.contributors (name, ipi, isni) VALUES ($1, $2, $3) RETURNING *',
             [name, ipi || null, isni || null]
         );
         
@@ -723,7 +932,7 @@ app.put('/api/contributors/:id', asyncHandler(async (req, res) => {
     
     try {
         const result = await pool.query(
-            'UPDATE metadata.contributor SET name = $1, ipi = $2, isni = $3 WHERE id = $4 RETURNING *',
+            'UPDATE metadata.contributors SET name = $1, ipi = $2, isni = $3 WHERE id = $4 RETURNING *',
             [name, ipi || null, isni || null, id]
         );
         
@@ -754,12 +963,12 @@ app.delete('/api/contributors/bulk-delete', asyncHandler(async (req, res) => {
         }
         
         const namesResult = await client.query(
-            'SELECT name FROM metadata.contributor WHERE id = ANY($1)',
+            'SELECT name FROM metadata.contributors WHERE id = ANY($1)',
             [ids]
         );
         
         const deleteResult = await client.query(
-            'DELETE FROM metadata.contributor WHERE id = ANY($1)',
+            'DELETE FROM metadata.contributors WHERE id = ANY($1)',
             [ids]
         );
         
@@ -786,7 +995,7 @@ app.delete('/api/contributors/:id', asyncHandler(async (req, res) => {
     
     try {
         const result = await pool.query(
-            'DELETE FROM metadata.contributor WHERE id = $1 RETURNING name',
+            'DELETE FROM metadata.contributors WHERE id = $1 RETURNING name',
             [id]
         );
         
