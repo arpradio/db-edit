@@ -41,6 +41,176 @@ app.get('/api/songs/search', asyncHandler(async (req, res) => {
     res.json(result.rows);
 }));
 
+app.get('/api/songs/search-for-token', asyncHandler(async (req, res) => {
+    const { q = '', tokenId } = req.query;
+    const query = `
+        SELECT DISTINCT s.id, s.title, s.validation_status,
+               string_agg(DISTINCT a.name, ', ') as artists,
+               CASE WHEN aso.asset_id IS NOT NULL THEN true ELSE false END as already_linked
+        FROM metadata.songs s
+        LEFT JOIN metadata.song_artists sa ON s.id = sa.song_id
+        LEFT JOIN metadata.artists a ON sa.artist_id = a.id
+        LEFT JOIN cip60.assets_songs aso ON s.id = aso.song_id AND aso.asset_id = $2
+        WHERE s.title ILIKE $1 OR a.name ILIKE $1
+        GROUP BY s.id, s.title, s.validation_status, aso.asset_id
+        ORDER BY already_linked ASC, s.title
+        LIMIT 20
+    `;
+    
+    const result = await pool.query(query, [`%${q}%`, tokenId]);
+    res.json(result.rows);
+}));
+
+app.post('/api/tokens/:tokenId/bulk-link-songs', asyncHandler(async (req, res) => {
+    const { tokenId } = req.params;
+    const { songIds } = req.body;
+    
+    if (!songIds || !Array.isArray(songIds) || songIds.length === 0) {
+        return res.status(400).json({ error: 'songIds array is required' });
+    }
+    
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        
+        let linkedCount = 0;
+        
+        for (const songId of songIds) {
+            const checkResult = await client.query(
+                'SELECT 1 FROM cip60.assets_songs WHERE asset_id = $1 AND song_id = $2',
+                [tokenId, songId]
+            );
+            
+            if (checkResult.rows.length === 0) {
+                await client.query(
+                    'INSERT INTO cip60.assets_songs (asset_id, song_id, is_primary) VALUES ($1, $2, $3)',
+                    [tokenId, songId, false]
+                );
+                linkedCount++;
+            }
+        }
+        
+        await client.query('COMMIT');
+        
+        res.json({ 
+            success: true, 
+            message: `Successfully linked token to ${linkedCount} songs`,
+            linkedCount 
+        });
+        
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Bulk link token error:', err);
+        res.status(500).json({ error: 'Failed to link token to songs: ' + err.message });
+    } finally {
+        client.release();
+    }
+}));
+
+app.post('/api/tokens/:tokenId/fix-relations', asyncHandler(async (req, res) => {
+    const { tokenId } = req.params;
+    const { songIds = [], markProcessed = true } = req.body;
+    
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        
+        let linkedCount = 0;
+        
+        for (const songId of songIds) {
+            const checkResult = await client.query(
+                'SELECT 1 FROM cip60.assets_songs WHERE asset_id = $1 AND song_id = $2',
+                [tokenId, songId]
+            );
+            
+            if (checkResult.rows.length === 0) {
+                await client.query(
+                    'INSERT INTO cip60.assets_songs (asset_id, song_id, is_primary) VALUES ($1, $2, $3)',
+                    [tokenId, songId, false]
+                );
+                linkedCount++;
+            }
+        }
+        
+        if (markProcessed) {
+            await client.query(
+                'INSERT INTO cip60.processing_status (asset_id, status, has_valid_songs) VALUES ($1, $2, $3) ON CONFLICT (asset_id) DO UPDATE SET status = $2, has_valid_songs = $3, processed_at = CURRENT_TIMESTAMP',
+                [tokenId, 'processed', linkedCount > 0 || songIds.length > 0]
+            );
+        }
+        
+        await client.query('COMMIT');
+        
+        let message = '';
+        if (linkedCount > 0 && markProcessed) {
+            message = `Linked token to ${linkedCount} songs and marked as processed`;
+        } else if (linkedCount > 0) {
+            message = `Linked token to ${linkedCount} songs`;
+        } else if (markProcessed) {
+            message = 'Token marked as processed';
+        } else {
+            message = 'No changes made';
+        }
+        
+        res.json({ 
+            success: true, 
+            message,
+            linkedCount 
+        });
+        
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Fix token relations error:', err);
+        res.status(500).json({ error: 'Failed to fix token relations: ' + err.message });
+    } finally {
+        client.release();
+    }
+}));
+
+app.get('/api/quality/issues/orphan-tokens', asyncHandler(async (req, res) => {
+    const query = `
+        SELECT a.id, a.asset_name as name, a.policy_id, a.release_title
+        FROM cip60.assets a
+        LEFT JOIN cip60.assets_songs aso ON a.id = aso.asset_id
+        WHERE aso.asset_id IS NULL
+        ORDER BY a.release_title, a.asset_name
+        LIMIT 100
+    `;
+    
+    const result = await pool.query(query);
+    res.json(result.rows);
+}));
+
+app.get('/api/quality/issues/unprocessed-tokens', asyncHandler(async (req, res) => {
+    const query = `
+        SELECT a.id, a.asset_name as name, a.policy_id, a.release_title
+        FROM cip60.assets a
+        LEFT JOIN cip60.processing_status ps ON a.id = ps.asset_id
+        WHERE ps.asset_id IS NULL
+        ORDER BY a.indexed_at DESC
+        LIMIT 100
+    `;
+    
+    const result = await pool.query(query);
+    res.json(result.rows);
+}));
+
+app.get('/api/quality/issues/failed-tokens', asyncHandler(async (req, res) => {
+    const query = `
+        SELECT a.id, a.asset_name as name, a.policy_id, a.release_title, ps.status
+        FROM cip60.assets a
+        JOIN cip60.processing_status ps ON a.id = ps.asset_id
+        WHERE ps.status = 'failed' OR ps.has_valid_songs = false
+        ORDER BY ps.processed_at DESC
+        LIMIT 100
+    `;
+    
+    const result = await pool.query(query);
+    res.json(result.rows);
+}));
+
 app.get('/api/artists/search', asyncHandler(async (req, res) => {
     const { q } = req.query;
     const result = await pool.query(

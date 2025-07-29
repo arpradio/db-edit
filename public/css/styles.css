@@ -11,6 +11,103 @@ body {
     line-height: 1.6;
 }
 
+.search-results-modal {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    margin-top: 8px;
+    display: none;
+}
+
+.search-results-modal .search-result-item {
+    padding: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #444;
+    color: #f1f1f1;
+    transition: background-color 0.2s;
+}
+
+.search-results-modal .search-result-item:hover {
+    background: #333;
+}
+
+.search-results-modal .search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-results-modal .search-result-item.already-linked {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #3a3a3a;
+}
+
+.search-results-modal .search-result-item.already-linked:hover {
+    background: #3a3a3a;
+}
+
+.selected-songs-list {
+    max-height: 150px;
+    overflow-y: auto;
+    background: #383838;
+    border: 1px solid #555;
+    border-radius: 4px;
+    margin: 12px 0;
+    padding: 8px;
+}
+
+.selected-song-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 4px;
+    background: #2a2a2a;
+    border-radius: 4px;
+    border: 1px solid #555;
+}
+
+.selected-song-item:last-child {
+    margin-bottom: 0;
+}
+
+.selected-song-item span {
+    flex: 1;
+    color: #f1f1f1;
+    font-size: 13px;
+}
+
+.checkbox-section {
+    margin: 12px 0;
+    padding: 12px;
+    background: #383838;
+    border-radius: 4px;
+    border: 1px solid #555;
+}
+
+.checkbox-section label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #f1f1f1;
+    cursor: pointer;
+    margin: 0;
+}
+
+.checkbox-section input[type="checkbox"] {
+    accent-color: #66b2ff;
+}
+
+.issue-meta {
+    font-size: 11px;
+    color: #aaa;
+    background: #444;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
