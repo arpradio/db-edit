@@ -78,7 +78,7 @@
             <p>Songs missing copyright information</p>
         </div>
         <div class="quality-card" onclick="loadDataIssues('no-images')">
-            <h4>Songs Without Images</h4>
+            <h4>Assets Without Images</h4>
             <div class="quality-count" id="noImagesCount">-</div>
             <p>Songs without artwork/images</p>
         </div>
@@ -97,31 +97,36 @@
             <div class="quality-count" id="orphanContributorsCount">-</div>
             <p>Contributors with no songs</p>
         </div>
-        <div class="quality-card" onclick="loadDataIssues('orphan-tokens')">
-            <h4>Orphaned Tokens</h4>
+        <div class="quality-card warning-card" onclick="loadDataIssues('orphan-tokens')">
+            <h4>⚠️ Orphaned Tokens</h4>
             <div class="quality-count" id="orphanTokensCount">-</div>
-            <p>Tokens with no songs</p>
+            <p><strong>CRITICAL:</strong> Tokens with no songs</p>
         </div>
         <div class="quality-card" onclick="loadDataIssues('orphan-images')">
             <h4>Orphaned Images</h4>
             <div class="quality-count" id="orphanImagesCount">-</div>
             <p>Images with no assets</p>
         </div>
-        <div class="quality-card" onclick="loadDataIssues('unprocessed-tokens')">
-            <h4>Unprocessed Tokens</h4>
+        <div class="quality-card warning-card" onclick="loadDataIssues('unprocessed-tokens')">
+            <h4>⚠️ Unprocessed Tokens</h4>
             <div class="quality-count" id="unprocessedTokensCount">-</div>
-            <p>Tokens not yet processed</p>
+            <p><strong>Needs Attention:</strong> Tokens not yet processed</p>
         </div>
-        <div class="quality-card" onclick="loadDataIssues('failed-tokens')">
-            <h4>Failed Tokens</h4>
+        <div class="quality-card error-card" onclick="loadDataIssues('failed-tokens')">
+            <h4>❌ Failed Tokens</h4>
             <div class="quality-count" id="failedTokensCount">-</div>
-            <p>Tokens that failed processing</p>
+            <p><strong>ERROR:</strong> Tokens that failed processing</p>
         </div>
         <div class="quality-card" onclick="loadDataIssues('artists-no-isni')">
             <h4>Artists Without ISNI</h4>
             <div class="quality-count" id="artistsNoIsniCount">-</div>
             <p>Artists missing ISNI codes</p>
         </div>
+        <div class="quality-card" onclick="loadDataIssues('no-contributors')">
+    <h4>Songs Without Contributors</h4>
+    <div class="quality-count" id="noContributorsCount">-</div>
+    <p>Songs missing contributor information</p>
+</div>
     </div>
     <div id="issuesContainer" class="issues-container">
         <div class="empty-state">
@@ -227,14 +232,14 @@
                 <div class="metadata-row">
                     <span class="metadata-label">ISRC:</span>
                     <div class="metadata-value">
-                        <input type="text" id="bulkIsrc" class="editable-field" placeholder="ISRC code (optional)" maxlength="12">
+                        <input type="text" id="bulkIsrc" class="editable-field" placeholder="ISRC code (optional)" maxlength="16">
                     </div>
                 </div>
                 
                 <div class="metadata-row">
                     <span class="metadata-label">ISWC:</span>
                     <div class="metadata-value">
-                        <input type="text" id="bulkIswc" class="editable-field" placeholder="ISWC code (optional)" maxlength="11">
+                        <input type="text" id="bulkIswc" class="editable-field" placeholder="ISWC code (optional)" maxlength="16">
                     </div>
                 </div>
             </div>
@@ -252,7 +257,29 @@
                     <input type="text" id="bulkGenres" class="editable-field" placeholder="Comma-separated genre names (optional)">
                 </div>
             </div>
-            
+
+            <div class="metadata-row">
+                <span class="metadata-label">Explicit Content:</span>
+                <div class="metadata-value">
+                    <select id="bulkIsExplicit" class="editable-field">
+                        <option value="">Keep current value</option>
+                        <option value="true">Yes - Explicit</option>
+                        <option value="false">No - Clean</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="metadata-row">
+                <span class="metadata-label">AI Generated:</span>
+                <div class="metadata-value">
+                    <select id="bulkIsAiGenerated" class="editable-field">
+                        <option value="">Keep current value</option>
+                        <option value="true">Yes - AI Generated</option>
+                        <option value="false">No - Human Created</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="modal-actions">
                 <button class="btn btn-primary" onclick="applyBulkChanges()">Apply Changes</button>
                 <button class="btn btn-secondary" onclick="closeBulkEditModal()">Cancel</button>
@@ -272,1548 +299,86 @@
         </div>
     </div>
 
+    <div id="tokenEditorModal" class="modal">
+        <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+            <h3>Edit Token <span id="tokenEditorTitle"></span></h3>
+
+            <div class="form-section">
+                <h4>Token Metadata</h4>
+                <div class="form-group">
+                    <label for="tokenEditName">Name (read-only):</label>
+                    <input type="text" id="tokenEditName" class="form-input" disabled style="opacity: 0.6; cursor: not-allowed;" />
+                    <small style="color: #888; font-size: 11px;">Name is automatically derived from asset name or metadata</small>
+                </div>
+                <div class="form-group">
+                    <label for="tokenEditPolicyId">Policy ID:</label>
+                    <input type="text" id="tokenEditPolicyId" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="tokenEditAssetName">Asset Name:</label>
+                    <input type="text" id="tokenEditAssetName" class="form-input" />
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h4>Artists (from linked songs)</h4>
+                <div id="tokenArtists" class="linked-items-list" style="min-height: 60px;">
+                    <div style="color: #888; font-style: italic; text-align: center; padding: 15px;">
+                        Artists appear here from linked songs. Link songs below to see artists.
+                    </div>
+                </div>
+                <p style="color: #888; font-size: 12px; margin-top: 8px;">
+                    To add/edit artists, link songs below and click "Edit Song" to manage their artists.
+                </p>
+            </div>
+
+            <div class="form-section">
+                <h4>Linked Songs</h4>
+                <div id="tokenLinkedSongs" class="linked-items-list"></div>
+
+                <h5 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px; color: #4CAF50;">Add Song by Title or URL</h5>
+                <div class="add-song-form" style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <input type="text" id="tokenNewSongTitle" class="form-input" placeholder="Song title or URL" style="flex: 1;" onkeypress="if(event.key==='Enter') addSongToTokenByTitle()" />
+                    <button class="btn btn-small btn-primary" onclick="addSongToTokenByTitle()">Add Song</button>
+                </div>
+                <p style="color: #888; font-size: 11px; margin-bottom: 15px;">
+                    If song exists, it will be linked. If not, a new song will be created.
+                </p>
+
+                <h5 style="margin-bottom: 10px; font-size: 14px; color: #4CAF50;">Or Search Existing Songs</h5>
+                <div class="search-container">
+                    <input type="text" id="tokenSongSearch" class="form-input" placeholder="Search existing songs..." oninput="searchSongsForToken(this.value)" />
+                    <div id="tokenSongResults" class="search-results"></div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h4>Linked Images</h4>
+                <div id="tokenLinkedImages" class="linked-items-list"></div>
+                <div class="add-image-form">
+                    <input type="text" id="tokenImageUrl" class="form-input" placeholder="Image URL" />
+                    <select id="tokenImageType" class="form-input">
+                        <option value="cover">Cover</option>
+                        <option value="thumbnail">Thumbnail</option>
+                        <option value="banner">Banner</option>
+                    </select>
+                    <button class="btn btn-small btn-primary" onclick="addImageToToken()">Add Image</button>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveTokenMetadata()">Save Token Metadata</button>
+                <button class="btn btn-secondary" onclick="closeTokenEditor()">Close</button>
+            </div>
+        </div>
+    </div>
+
+
     <div id="loadingSpinner" class="loading-spinner">
         <div class="spinner"></div>
         <p>Loading...</p>
     </div>
 
-    <script>
-let originalData = {};
-let currentChanges = {};
-let lastSearchQuery = '';
-let selectedSongs = new Set();
-let bulkEditMode = false;
-let selectedItems = new Set();
-let currentIssueType = '';
-
-class StateManager {
-    static refreshSongCard(songId) {
-        const card = document.querySelector(`[data-song-id="${songId}"]`);
-        const song = originalData[songId];
-        if (!card || !song) return;
-
-        const titleElement = card.querySelector('.song-title');
-        if (titleElement) titleElement.textContent = song.title;
-
-        const titleInput = card.querySelector('[data-field="title"]');
-        if (titleInput) titleInput.value = song.title;
-
-        const durationInput = card.querySelector('[data-field="duration"]');
-        if (durationInput) durationInput.value = song.duration || '';
-
-        const isrcInput = card.querySelector('[data-field="isrc"]');
-        if (isrcInput) isrcInput.value = song.isrc || '';
-
-        const iswcInput = card.querySelector('[data-field="iswc"]');
-        if (iswcInput) iswcInput.value = song.iswc || '';
-
-        const statusSelect = card.querySelector('[data-field="validation_status"]');
-        if (statusSelect) statusSelect.value = song.validation_status;
-
-        const statusIndicator = card.querySelector('.status-indicator');
-        if (statusIndicator) {
-            statusIndicator.className = `status-indicator status-${song.validation_status}`;
-        }
-
-        const artistsContainer = document.getElementById(`artists-${songId}`);
-        if (artistsContainer) {
-            StateManager.rebuildTagContainer(artistsContainer, song.artists || [], songId, 'artist');
-        }
-
-        const genresContainer = document.getElementById(`genres-${songId}`);
-        if (genresContainer) {
-            StateManager.rebuildTagContainer(genresContainer, song.genres || [], songId, 'genre');
-        }
-
-        StateManager.resetSaveButton(songId);
-        card.classList.remove('changed');
-    }
-
-    static rebuildTagContainer(container, items, songId, type) {
-        const placeholder = type === 'artist' ? 'Add artist...' : 'Add genre...';
-        const containerId = type === 'artist' ? `artists-${songId}` : `genres-${songId}`;
-        
-        const processedItems = type === 'artist' ? 
-            items.map(item => typeof item === 'object' ? item.name : item) :
-            items;
-        
-        container.innerHTML = `
-            ${processedItems.map(item => `
-                <div class="tag">
-                    ${escapeHtml(item)}
-                    <span class="tag-remove" onclick="removeTag(this, ${songId})">×</span>
-                </div>
-            `).join('')}
-            <input type="text" class="add-tag-input" placeholder="${placeholder}" 
-                   onkeypress="addTag(event, '${containerId}', ${songId})">
-        `;
-    }
-
-    static resetSaveButton(songId) {
-        const saveButton = document.getElementById(`save-${songId}`);
-        if (saveButton) {
-            saveButton.disabled = true;
-            saveButton.className = 'btn btn-primary';
-            saveButton.textContent = 'Save Changes';
-        }
-    }
-
-    static markSongChanged(songId) {
-        const card = document.querySelector(`[data-song-id="${songId}"]`);
-        const saveButton = document.getElementById(`save-${songId}`);
-        
-        if (card) card.classList.add('changed');
-        if (saveButton) {
-            saveButton.disabled = false;
-            saveButton.className = 'btn btn-success';
-            saveButton.textContent = 'Save Changes*';
-        }
-    }
-}
-
-function showTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.classList.remove('active');
-    });
-    
-    document.getElementById(tabName + 'Tab').classList.add('active');
-    event.target.classList.add('active');
-    
-    if (tabName === 'quality') {
-        loadQualityCounts();
-    } else if (tabName === 'stats') {
-        loadStats();
-    }
-}
-
-async function searchSongs() {
-    const query = document.getElementById('searchInput').value;
-    if (!query.trim()) {
-        showMessage('Please enter a search term', 'info');
-        return;
-    }
-    
-    lastSearchQuery = query;
-    showLoading();
-    
-    try {
-        const response = await fetch(`/api/songs/search?q=${encodeURIComponent(query)}`);
-        const songs = await response.json();
-        
-        showTabByName('search');
-        displaySongs(songs);
-    } catch (error) {
-        console.error('Search error:', error);
-        showError('Failed to search songs');
-    } finally {
-        hideLoading();
-    }
-}
-
-function showTabByName(tabName) {
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.classList.remove('active');
-    });
-    
-    document.getElementById(tabName + 'Tab').classList.add('active');
-    document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
-}
-
-function clearResults() {
-    const container = document.getElementById('songsContainer');
-    
-    container.innerHTML = '<div class="empty-state" id="emptyState"><p>Use the search bar above to find songs to edit</p></div>';
-    
-    document.getElementById('searchInput').value = '';
-    lastSearchQuery = '';
-    originalData = {};
-    selectedSongs.clear();
-    updateBulkEditControls();
-}
-
-async function refreshSearch() {
-    if (lastSearchQuery) {
-        document.getElementById('searchInput').value = lastSearchQuery;
-        await searchSongs();
-    }
-}
-
-async function loadQualityCounts() {
-    try {
-        const response = await fetch('/api/quality/counts');
-        const counts = await response.json();
-        
-        const elements = {
-            'noArtistsCount': counts.no_artists || 0,
-            'noGenresCount': counts.no_genres || 0,
-            'noAudioCount': counts.no_audio || 0,
-            'noDurationCount': counts.no_duration || 0,
-            'noIsrcCount': counts.no_isrc || 0,
-            'noIswcCount': counts.no_iswc || 0,
-            'noTokensCount': counts.no_tokens || 0,
-            'orphanArtistsCount': counts.orphan_artists || 0,
-            'orphanGenresCount': counts.orphan_genres || 0,
-            'orphanContributorsCount': counts.orphan_contributors || 0
-        };
-        
-        Object.entries(elements).forEach(([id, count]) => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.textContent = count;
-                element.classList.toggle('zero', count === 0);
-            }
-        });
-        
-    } catch (error) {
-        console.error('Failed to load quality counts:', error);
-        showMessage('Failed to load data quality information', 'error');
-    }
-}
-
-async function loadDataIssues(issueType) {
-    currentIssueType = issueType;
-    selectedItems.clear();
-    showLoading();
-    
-    try {
-        const response = await fetch(`/api/quality/issues/${issueType}`);
-        const issues = await response.json();
-        
-        displayIssues(issues, issueType);
-    } catch (error) {
-        console.error('Failed to load issues:', error);
-        showMessage('Failed to load data issues', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-function displayIssues(issues, issueType) {
-    const container = document.getElementById('issuesContainer');
-    
-    if (issues.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No issues found! 🎉</p></div>';
-        return;
-    }
-    
-    const issueTitle = getIssueTitle(issueType);
-    const showBulkActions = issueType.includes('orphan');
-    
-    container.innerHTML = `
-        <h4>${issueTitle} (${issues.length} found)</h4>
-        ${showBulkActions ? createBulkActionsHTML(issueType) : ''}
-        <div class="issues-list">
-            ${showBulkActions ? createSelectAllHTML() : ''}
-            ${issues.map(issue => createIssueItem(issue, issueType)).join('')}
-        </div>
-    `;
-    
-    updateBulkActionsVisibility();
-}
-
-function createBulkActionsHTML(issueType) {
-    const entityType = issueType.includes('artists') ? 'artists' : 
-                      issueType.includes('genres') ? 'genres' : 'contributors';
-    return `
-        <div class="bulk-actions" id="bulkActions">
-            <div class="bulk-actions-header">
-                <span class="selection-info" id="selectionInfo">0 items selected</span>
-                <div class="bulk-buttons">
-                    <button class="btn btn-small btn-danger" onclick="bulkDeleteSelected()">Delete Selected</button>
-                    <button class="btn btn-small btn-danger" onclick="bulkDeleteAll('${issueType}')">Delete All ${entityType}</button>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function createSelectAllHTML() {
-    return `
-        <div class="select-all-container">
-            <input type="checkbox" id="selectAllCheckbox" class="issue-checkbox" onchange="toggleSelectAll()">
-            <label for="selectAllCheckbox">Select All</label>
-        </div>
-    `;
-}
-
-function createIssueItem(issue, issueType) {
-    if (issueType.includes('songs') || issueType.includes('no-')) {
-        return `
-            <div class="issue-item" onclick="editSongFromIssue(${issue.id})">
-                <div class="issue-content">
-                    <span class="issue-title">${escapeHtml(issue.title || issue.name)}</span>
-                    <span class="issue-id">ID: ${issue.id}</span>
-                </div>
-                <div class="issue-actions">
-                    <button class="btn btn-small btn-primary" onclick="event.stopPropagation(); editSongFromIssue(${issue.id})">Edit</button>
-                </div>
-            </div>
-        `;
-    } else {
-        return `
-            <div class="issue-item" data-item-id="${issue.id}">
-                <div class="issue-content">
-                    <input type="checkbox" class="issue-checkbox" data-item-id="${issue.id}" onchange="toggleItemSelection(${issue.id})">
-                    <span class="issue-title">${escapeHtml(issue.name)}</span>
-                    <span class="issue-id">ID: ${issue.id}</span>
-                </div>
-                <div class="issue-actions">
-                    <button class="btn btn-small btn-danger" onclick="deleteOrphan('${issueType}', ${issue.id}, '${escapeHtml(issue.name)}')">Delete</button>
-                </div>
-            </div>
-        `;
-    }
-}
-
-function toggleItemSelection(itemId) {
-    const checkbox = document.querySelector(`input[data-item-id="${itemId}"]`);
-    const issueItem = document.querySelector(`div[data-item-id="${itemId}"]`);
-    
-    if (checkbox.checked) {
-        selectedItems.add(itemId);
-        issueItem.classList.add('selected');
-    } else {
-        selectedItems.delete(itemId);
-        issueItem.classList.remove('selected');
-    }
-    
-    updateSelectionInfo();
-    updateSelectAllCheckbox();
-    updateBulkActionsVisibility();
-}
-
-function toggleSelectAll() {
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    const allCheckboxes = document.querySelectorAll('.issue-checkbox[data-item-id]');
-    
-    selectedItems.clear();
-    
-    allCheckboxes.forEach(checkbox => {
-        checkbox.checked = selectAllCheckbox.checked;
-        const itemId = parseInt(checkbox.dataset.itemId);
-        const issueItem = document.querySelector(`div[data-item-id="${itemId}"]`);
-        
-        if (selectAllCheckbox.checked) {
-            selectedItems.add(itemId);
-            issueItem.classList.add('selected');
-        } else {
-            issueItem.classList.remove('selected');
-        }
-    });
-    
-    updateSelectionInfo();
-    updateBulkActionsVisibility();
-}
-
-function updateSelectionInfo() {
-    const selectionInfo = document.getElementById('selectionInfo');
-    if (selectionInfo) {
-        selectionInfo.textContent = `${selectedItems.size} items selected`;
-    }
-}
-
-function updateSelectAllCheckbox() {
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    const allCheckboxes = document.querySelectorAll('.issue-checkbox[data-item-id]');
-    
-    if (selectAllCheckbox && allCheckboxes.length > 0) {
-        const checkedCount = Array.from(allCheckboxes).filter(cb => cb.checked).length;
-        selectAllCheckbox.checked = checkedCount === allCheckboxes.length;
-        selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
-    }
-}
-
-function updateBulkActionsVisibility() {
-    const bulkActions = document.getElementById('bulkActions');
-    if (bulkActions) {
-        bulkActions.classList.toggle('visible', selectedItems.size > 0);
-    }
-}
-
-async function bulkDeleteSelected() {
-    if (selectedItems.size === 0) {
-        showMessage('No items selected', 'info');
-        return;
-    }
-    
-    const entityType = currentIssueType.includes('artists') ? 'artists' : 'genres';
-    const selectedIds = Array.from(selectedItems);
-    
-    const selectedNames = selectedIds.map(id => {
-        const issueItem = document.querySelector(`div[data-item-id="${id}"] .issue-title`);
-        return issueItem ? issueItem.textContent : `ID: ${id}`;
-    });
-    
-    showBulkModal(
-        `Delete ${selectedItems.size} selected ${entityType}?`,
-        selectedNames,
-        () => executeBulkDelete(currentIssueType, selectedIds)
-    );
-}
-
-async function bulkDeleteAll(issueType) {
-    const entityType = issueType.includes('artists') ? 'artists' : 'genres';
-    const allItems = document.querySelectorAll('.issue-item[data-item-id]');
-    const allIds = Array.from(allItems).map(item => parseInt(item.dataset.itemId));
-    const allNames = Array.from(allItems).map(item => item.querySelector('.issue-title').textContent);
-    
-    showBulkModal(
-        `Delete ALL ${allIds.length} ${entityType}?`,
-        allNames,
-        () => executeBulkDelete(issueType, allIds)
-    );
-}
-
-function showBulkModal(actionText, itemNames, confirmCallback) {
-    document.getElementById('bulkActionText').textContent = actionText;
-    
-    const itemsList = document.getElementById('bulkItemsList');
-    itemsList.innerHTML = itemNames.map(name => 
-        `<div class="bulk-item">${escapeHtml(name)}</div>`
-    ).join('');
-    
-    document.getElementById('confirmBulkBtn').onclick = confirmCallback;
-    document.getElementById('bulkModal').style.display = 'block';
-}
-
-function closeBulkModal() {
-    document.getElementById('bulkModal').style.display = 'none';
-}
-
-async function executeBulkDelete(issueType, ids) {
-    showLoading();
-    closeBulkModal();
-    
-    try {
-        const endpoint = issueType.includes('artists') ? 'artists' : 
-                        issueType.includes('genres') ? 'genres' : 'contributors';
-        const response = await fetch(`/api/${endpoint}/bulk-delete`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ ids })
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage(`Successfully deleted ${ids.length} items`, 'success');
-            selectedItems.clear();
-            await loadDataIssues(currentIssueType);
-            await loadQualityCounts();
-        } else {
-            throw new Error(result.error || 'Failed to delete items');
-        }
-    } catch (error) {
-        console.error('Bulk delete error:', error);
-        showMessage(`Failed to delete items: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-function getIssueTitle(issueType) {
-    const titles = {
-        'no-artists': 'Songs Without Artists',
-        'no-genres': 'Songs Without Genres', 
-        'no-audio': 'Songs Without Audio Files',
-        'no-duration': 'Songs Without Duration',
-        'no-isrc': 'Songs Without ISRC',
-        'no-iswc': 'Songs Without ISWC',
-        'no-tokens': 'Songs Without Tokens',
-        'orphan-artists': 'Artists With No Songs',
-        'orphan-genres': 'Genres With No Songs',
-        'orphan-contributors': 'Contributors With No Songs'
-    };
-    return titles[issueType] || 'Data Issues';
-}
-
-async function editSongFromIssue(songId, retryCount = 0) {
-    showLoading();
-    
-    try {
-        await new Promise(resolve => setTimeout(resolve, retryCount * 500));
-        
-        const response = await fetch(`/api/songs/${songId}`);
-        if (!response.ok) {
-            if (response.status === 404 && retryCount < 3) {
-                hideLoading();
-                return editSongFromIssue(songId, retryCount + 1);
-            }
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const song = await response.json();
-        
-        showTabByName('search');
-        displaySongs([song]);
-        
-        setTimeout(() => {
-            const songCard = document.querySelector(`[data-song-id="${songId}"]`);
-            if (songCard) {
-                songCard.scrollIntoView({ behavior: 'smooth' });
-                songCard.style.border = '2px solid #007bff';
-                setTimeout(() => {
-                    songCard.style.border = '';
-                }, 3000);
-            }
-        }, 100);
-        
-    } catch (error) {
-        console.error('Failed to load song:', error);
-        if (retryCount < 3) {
-            showMessage(`Retrying... (attempt ${retryCount + 1})`, 'info');
-            hideLoading();
-            return editSongFromIssue(songId, retryCount + 1);
-        }
-        showMessage(`Failed to load song for editing after ${retryCount + 1} attempts: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function deleteOrphan(type, id, name) {
-    if (!confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
-        return;
-    }
-    
-    showLoading();
-    
-    try {
-        const endpoint = type.includes('artists') ? 'artists' : 
-                        type.includes('genres') ? 'genres' : 'contributors';
-        const response = await fetch(`/api/${endpoint}/${id}`, {
-            method: 'DELETE'
-        });
-        
-        if (response.ok) {
-            showMessage(`Deleted ${name} successfully`, 'success');
-            await loadDataIssues(type);
-            await loadQualityCounts();
-        } else {
-            throw new Error('Failed to delete');
-        }
-    } catch (error) {
-        console.error('Delete error:', error);
-        showMessage(`Failed to delete ${name}`, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function deleteSong(songId) {
-    const song = originalData[songId];
-    if (!song) {
-        showMessage('Song data not found', 'error');
-        return;
-    }
-    
-    showDeleteConfirmModal(
-        `Are you sure you want to delete "${song.title}"? This action cannot be undone and will remove all associated data.`,
-        () => executeSingleDelete(songId)
-    );
-}
-
-async function executeSingleDelete(songId) {
-    const song = originalData[songId];
-    closeDeleteModal();
-    showLoading();
-    
-    try {
-        const response = await fetch(`/api/songs/${songId}`, {
-            method: 'DELETE'
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage(`Successfully deleted "${song.title}"`, 'success');
-            
-            const songCard = document.querySelector(`[data-song-id="${songId}"]`);
-            if (songCard) {
-                songCard.remove();
-            }
-            
-            delete originalData[songId];
-            selectedSongs.delete(songId);
-            updateBulkEditControls();
-            
-            const remainingSongs = document.querySelectorAll('.song-card').length;
-            if (remainingSongs === 0) {
-                const container = document.getElementById('songsContainer');
-                container.innerHTML = '<div class="empty-state" id="emptyState"><p>Use the search bar above to find songs to edit</p></div>';
-            }
-            
-            setTimeout(async () => {
-                await Promise.all([loadQualityCounts(), loadStats()]);
-            }, 500);
-            
-        } else {
-            throw new Error(result.error || 'Failed to delete song');
-        }
-    } catch (error) {
-        console.error('Delete error:', error);
-        showMessage(`Failed to delete song: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function bulkDeleteSongs() {
-    if (selectedSongs.size === 0) {
-        showMessage('No songs selected', 'info');
-        return;
-    }
-    
-    const selectedIds = Array.from(selectedSongs);
-    const selectedTitles = selectedIds.map(id => {
-        const song = originalData[id];
-        return song ? song.title : `ID: ${id}`;
-    });
-    
-    showBulkModal(
-        `Delete ${selectedSongs.size} selected songs?`,
-        selectedTitles,
-        () => executeBulkSongDelete(selectedIds)
-    );
-}
-
-async function executeBulkSongDelete(ids) {
-    showLoading();
-    closeBulkModal();
-    
-    try {
-        const response = await fetch('/api/songs/bulk-delete', {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ ids })
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage(`Successfully deleted ${ids.length} songs`, 'success');
-            
-            ids.forEach(id => {
-                const songCard = document.querySelector(`[data-song-id="${id}"]`);
-                if (songCard) {
-                    songCard.remove();
-                }
-                delete originalData[id];
-                selectedSongs.delete(id);
-            });
-            
-            updateBulkEditControls();
-            
-            const remainingSongs = document.querySelectorAll('.song-card').length;
-            if (remainingSongs === 0) {
-                const container = document.getElementById('songsContainer');
-                container.innerHTML = '<div class="empty-state" id="emptyState"><p>Use the search bar above to find songs to edit</p></div>';
-            }
-            
-            if (bulkEditMode) {
-                toggleBulkEditMode();
-            }
-            
-            setTimeout(async () => {
-                await Promise.all([loadQualityCounts(), loadStats()]);
-            }, 500);
-            
-        } else {
-            throw new Error(result.error || 'Failed to delete songs');
-        }
-    } catch (error) {
-        console.error('Bulk delete error:', error);
-        showMessage(`Failed to delete songs: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function loadStats() {
-    try {
-        const response = await fetch('/api/stats');
-        const stats = await response.json();
-        
-        const statElements = {
-            'totalSongs': stats.total_songs || 0,
-            'totalArtists': stats.total_artists || 0,
-            'totalGenres': stats.total_genres || 0,
-            'verifiedSongs': stats.verified_songs || 0,
-            'unverifiedSongs': stats.unverified_songs || 0,
-            'pendingSongs': stats.pending_songs || 0
-        };
-        
-        Object.entries(statElements).forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (element) element.textContent = value;
-        });
-        
-    } catch (error) {
-        console.error('Failed to load statistics:', error);
-        showMessage('Failed to load statistics', 'error');
-    }
-}
-
-function toggleBulkEditMode() {
-    bulkEditMode = !bulkEditMode;
-    const button = document.getElementById('bulkEditToggle');
-    
-    if (bulkEditMode) {
-        button.textContent = 'Exit Bulk Edit';
-        button.className = 'btn btn-secondary';
-        selectedSongs.clear();
-        updateBulkEditControls();
-        addSongCheckboxes();
-    } else {
-        button.textContent = 'Bulk Edit Mode';
-        button.className = 'btn btn-primary';
-        selectedSongs.clear();
-        updateBulkEditControls();
-        removeSongCheckboxes();
-    }
-}
-
-function addSongCheckboxes() {
-    document.querySelectorAll('.song-card').forEach(card => {
-        const songId = card.dataset.songId;
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'song-checkbox';
-        checkbox.dataset.songId = songId;
-        checkbox.onchange = () => toggleSongSelection(songId);
-        
-        const checkboxContainer = document.createElement('div');
-        checkboxContainer.className = 'song-checkbox-container';
-        checkboxContainer.appendChild(checkbox);
-        
-        card.insertBefore(checkboxContainer, card.firstChild);
-    });
-}
-
-function removeSongCheckboxes() {
-    document.querySelectorAll('.song-checkbox-container').forEach(container => {
-        container.remove();
-    });
-}
-
-function toggleSongSelection(songId) {
-    const checkbox = document.querySelector(`input[data-song-id="${songId}"]`);
-    const card = document.querySelector(`[data-song-id="${songId}"]`);
-    
-    if (checkbox.checked) {
-        selectedSongs.add(parseInt(songId));
-        card.classList.add('selected');
-    } else {
-        selectedSongs.delete(parseInt(songId));
-        card.classList.remove('selected');
-    }
-    
-    updateBulkEditControls();
-}
-
-function updateBulkEditControls() {
-    const controls = document.getElementById('bulkEditControls');
-    if (controls) {
-        if (bulkEditMode && selectedSongs.size > 0) {
-            controls.style.display = 'block';
-            document.getElementById('selectedCount').textContent = selectedSongs.size;
-        } else {
-            controls.style.display = 'none';
-        }
-    }
-}
-
-function openBulkEditModal() {
-    if (selectedSongs.size === 0) {
-        showMessage('No songs selected', 'info');
-        return;
-    }
-    
-    document.getElementById('bulkTitle').value = '';
-    document.getElementById('bulkDuration').value = '';
-    document.getElementById('bulkStatus').value = '';
-    document.getElementById('bulkIsrc').value = '';
-    document.getElementById('bulkIswc').value = '';
-    document.getElementById('bulkArtists').value = '';
-    document.getElementById('bulkGenres').value = '';
-    
-    document.getElementById('bulkEditModal').style.display = 'block';
-}
-
-function closeBulkEditModal() {
-    document.getElementById('bulkEditModal').style.display = 'none';
-}
-
-async function applyBulkChanges() {
-    const title = document.getElementById('bulkTitle').value.trim();
-    const duration = document.getElementById('bulkDuration').value.trim();
-    const status = document.getElementById('bulkStatus').value;
-    const isrc = document.getElementById('bulkIsrc').value.trim();
-    const iswc = document.getElementById('bulkIswc').value.trim();
-    const artistsText = document.getElementById('bulkArtists').value.trim();
-    const genresText = document.getElementById('bulkGenres').value.trim();
-    
-    const changes = {};
-    if (title) changes.title = title;
-    if (duration) changes.duration = duration;
-    if (status) changes.validation_status = status;
-    if (isrc) changes.isrc = isrc;
-    if (iswc) changes.iswc = iswc;
-    if (artistsText) changes.artists = artistsText.split(',').map(a => a.trim()).filter(a => a);
-    if (genresText) changes.genres = genresText.split(',').map(g => g.trim()).filter(g => g);
-    
-    if (Object.keys(changes).length === 0) {
-        showMessage('No changes specified', 'info');
-        return;
-    }
-    
-    showLoading();
-    closeBulkEditModal();
-    
-    try {
-        const response = await fetch('/api/songs/bulk-update', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                songs: Array.from(selectedSongs),
-                changes: changes
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage(`Successfully updated ${selectedSongs.size} songs`, 'success');
-            
-            selectedSongs.forEach(songId => {
-                if (originalData[songId]) {
-                    originalData[songId] = { ...originalData[songId], ...changes };
-                    StateManager.refreshSongCard(songId);
-                }
-            });
-            
-            toggleBulkEditMode();
-            
-            setTimeout(async () => {
-                await Promise.all([loadQualityCounts(), loadStats()]);
-            }, 500);
-            
-        } else {
-            throw new Error(result.error || 'Failed to update songs');
-        }
-    } catch (error) {
-        console.error('Bulk update error:', error);
-        showMessage(`Failed to update songs: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-function displaySongs(songs) {
-    const container = document.getElementById('songsContainer');
-    let emptyState = document.getElementById('emptyState');
-    
-    if (songs.length === 0) {
-        container.innerHTML = '<div class="empty-state" id="emptyState"><p>No songs found</p></div>';
-        return;
-    }
-    
-    if (emptyState) {
-        emptyState.style.display = 'none';
-    }
-    
-    container.innerHTML = createBulkEditHeader() + songs.map(song => createSongCard(song)).join('');
-    
-    songs.forEach(song => {
-        originalData[song.id] = { ...song };
-    });
-    
-    if (bulkEditMode) {
-        addSongCheckboxes();
-    }
-}
-
-function createBulkEditHeader() {
-    return `
-        <div class="bulk-edit-header">
-            <button class="btn btn-primary" id="bulkEditToggle" onclick="toggleBulkEditMode()">Bulk Edit Mode</button>
-            <div id="bulkEditControls" style="display: none;">
-                <span id="selectedCount">0</span> songs selected
-                <button class="btn btn-primary" onclick="openBulkEditModal()">Edit Selected</button>
-                <button class="btn btn-danger" onclick="bulkDeleteSongs()">Delete Selected</button>
-            </div>
-        </div>
-    `;
-}
-
-function createSongCard(song) {
-    const artists = song.artists || [];
-    const genres = song.genres || [];
-    const audioFiles = song.audio_files || [];
-    const tokens = song.tokens || [];
-    
-    const processedArtists = artists.map(artist => 
-        typeof artist === 'object' ? artist.name : artist
-    );
-    
-    return `
-        <div class="song-card" data-song-id="${song.id}">
-            <div class="song-header">
-                <div class="song-title">${escapeHtml(song.title)}</div>
-                <div class="song-id">ID: ${song.id}</div>
-            </div>
-            
-            <div class="metadata-row">
-                <span class="metadata-label">Title:</span>
-                <div class="metadata-value">
-                    <input type="text" class="editable-field" value="${escapeHtml(song.title)}" 
-                           onchange="markChanged(${song.id})" data-field="title">
-                </div>
-            </div>
-            
-            <div class="metadata-row">
-                <span class="metadata-label">Artists:</span>
-                <div class="metadata-value">
-                    <div class="tag-container" id="artists-${song.id}" onchange="markChanged(${song.id})">
-                        ${processedArtists.map(artist => `
-                            <div class="tag">
-                                ${escapeHtml(artist)}
-                                <span class="tag-remove" onclick="removeTag(this, ${song.id})">×</span>
-                            </div>
-                        `).join('')}
-                        <input type="text" class="add-tag-input" placeholder="Add artist..." 
-                               onkeypress="addTag(event, 'artists-${song.id}', ${song.id})">
-                    </div>
-                </div>
-            </div>
-            
-            <div class="metadata-row">
-                <span class="metadata-label">Genres:</span>
-                <div class="metadata-value">
-                    <div class="tag-container" id="genres-${song.id}" onchange="markChanged(${song.id})">
-                        ${genres.map(genre => `
-                            <div class="tag">
-                                ${escapeHtml(genre)}
-                                <span class="tag-remove" onclick="removeTag(this, ${song.id})">×</span>
-                            </div>
-                        `).join('')}
-                        <input type="text" class="add-tag-input" placeholder="Add genre..." 
-                               onkeypress="addTag(event, 'genres-${song.id}', ${song.id})">
-                    </div>
-                </div>
-            </div>
-            
-            <div class="two-column">
-                <div class="metadata-row">
-                    <span class="metadata-label">Duration:</span>
-                    <div class="metadata-value">
-                        <input type="text" class="editable-field" value="${song.duration || ''}" 
-                               onchange="markChanged(${song.id})" data-field="duration">
-                    </div>
-                </div>
-                
-                <div class="metadata-row">
-                    <span class="metadata-label">Status:</span>
-                    <div class="metadata-value">
-                        <span class="status-indicator status-${song.validation_status}"></span>
-                        <select class="editable-field" onchange="markChanged(${song.id})" data-field="validation_status">
-                            <option value="unverified" ${song.validation_status === 'unverified' ? 'selected' : ''}>Unverified</option>
-                            <option value="verified" ${song.validation_status === 'verified' ? 'selected' : ''}>Verified</option>
-                            <option value="pending" ${song.validation_status === 'pending' ? 'selected' : ''}>Pending</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="two-column">
-                <div class="metadata-row">
-                    <span class="metadata-label">ISRC:</span>
-                    <div class="metadata-value">
-                        <input type="text" class="editable-field id-field" value="${song.isrc || ''}" 
-                               onchange="markChanged(${song.id})" data-field="isrc" maxlength="12" placeholder="ISRC code">
-                    </div>
-                </div>
-                
-                <div class="metadata-row">
-                    <span class="metadata-label">ISWC:</span>
-                    <div class="metadata-value">
-                        <input type="text" class="editable-field id-field" value="${song.iswc || ''}" 
-                               onchange="markChanged(${song.id})" data-field="iswc" maxlength="11" placeholder="ISWC code">
-                    </div>
-                </div>
-            </div>
-            
-            ${(audioFiles.length > 0 || tokens.length > 0) ? `
-            <div class="relations-section">
-                <div class="relations-title">
-                    Audio Files (${audioFiles.length})
-                    <button class="btn btn-small btn-primary" onclick="toggleAddAudioForm(${song.id})">Add Audio File</button>
-                </div>
-                
-                <div id="addAudioForm-${song.id}" class="add-form">
-                    <div class="form-row">
-                        <input type="text" placeholder="File URL" id="audioUrl-${song.id}">
-                        <select id="audioType-${song.id}">
-                            <option value="mp3">MP3</option>
-                            <option value="wav">WAV</option>
-                            <option value="flac">FLAC</option>
-                            <option value="m4a">M4A</option>
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <input type="text" placeholder="IPFS CID (optional)" id="audioCid-${song.id}">
-                        <button class="btn btn-small btn-primary" onclick="addAudioFile(${song.id})">Add</button>
-                        <button class="btn btn-small btn-secondary" onclick="toggleAddAudioForm(${song.id})">Cancel</button>
-                    </div>
-                </div>
-                
-                ${audioFiles.map(file => `
-                    <div class="relation-item" id="audio-${file.id}">
-                        <div class="relation-info">
-                            <div class="relation-type">${file.type}</div>
-                            <div class="relation-name">${escapeHtml(file.url)}</div>
-                        </div>
-                        <div class="relation-actions">
-                            <button class="btn btn-small btn-secondary" onclick="editAudioFile(${file.id}, '${escapeHtml(file.url)}', '${file.type}', '${file.ipfs_cid || ''}')">Edit</button>
-                            <button class="btn btn-small btn-danger" onclick="deleteAudioFile(${file.id}, ${song.id})">Delete</button>
-                        </div>
-                    </div>
-                `).join('')}
-                
-                <div class="relations-title" style="margin-top: 16px;">
-                    Blockchain Tokens (${tokens.length})
-                    <button class="btn btn-small btn-primary" onclick="toggleAddTokenForm(${song.id})">Link Token</button>
-                </div>
-                
-                <div id="addTokenForm-${song.id}" class="add-form">
-                    <div class="form-row">
-                        <div class="search-dropdown">
-                            <input type="text" placeholder="Search tokens..." id="tokenSearch-${song.id}" 
-                                   oninput="searchTokens(${song.id}, this.value)" autocomplete="off">
-                            <div class="search-results" id="tokenResults-${song.id}"></div>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <label><input type="checkbox" id="tokenPrimary-${song.id}"> Primary Token</label>
-                        <button class="btn btn-small btn-secondary" onclick="toggleAddTokenForm(${song.id})">Cancel</button>
-                    </div>
-                </div>
-                
-                ${tokens.map(token => `
-                    <div class="relation-item" id="token-${token.id}">
-                        <div class="relation-info">
-                            <div class="relation-type">${token.policy_id.substring(0, 8)}...</div>
-                            <div class="relation-name">${escapeHtml(token.name)}</div>
-                        </div>
-                        <div class="relation-actions">
-                            <button class="btn btn-small btn-danger" onclick="unlinkToken(${song.id}, ${token.id})">Unlink</button>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-            ` : `
-            <div class="relations-section">
-                <div class="relations-title">
-                    Audio Files (0)
-                    <button class="btn btn-small btn-primary" onclick="toggleAddAudioForm(${song.id})">Add Audio File</button>
-                </div>
-                
-                <div id="addAudioForm-${song.id}" class="add-form">
-                    <div class="form-row">
-                        <input type="text" placeholder="File URL" id="audioUrl-${song.id}">
-                        <select id="audioType-${song.id}">
-                            <option value="mp3">MP3</option>
-                            <option value="wav">WAV</option>
-                            <option value="flac">FLAC</option>
-                            <option value="m4a">M4A</option>
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <input type="text" placeholder="IPFS CID (optional)" id="audioCid-${song.id}">
-                        <button class="btn btn-small btn-primary" onclick="addAudioFile(${song.id})">Add</button>
-                        <button class="btn btn-small btn-secondary" onclick="toggleAddAudioForm(${song.id})">Cancel</button>
-                    </div>
-                </div>
-                
-                <div class="relations-title" style="margin-top: 16px;">
-                    Blockchain Tokens (0)
-                    <button class="btn btn-small btn-primary" onclick="toggleAddTokenForm(${song.id})">Link Token</button>
-                </div>
-                
-                <div id="addTokenForm-${song.id}" class="add-form">
-                    <div class="form-row">
-                        <div class="search-dropdown">
-                            <input type="text" placeholder="Search tokens..." id="tokenSearch-${song.id}" 
-                                   oninput="searchTokens(${song.id}, this.value)" autocomplete="off">
-                            <div class="search-results" id="tokenResults-${song.id}"></div>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <label><input type="checkbox" id="tokenPrimary-${song.id}"> Primary Token</label>
-                        <button class="btn btn-small btn-secondary" onclick="toggleAddTokenForm(${song.id})">Cancel</button>
-                    </div>
-                </div>
-            </div>
-            `}
-            
-            <div class="actions">
-                <button class="btn btn-primary" onclick="saveSong(${song.id})" id="save-${song.id}" disabled>
-                    Save Changes
-                </button>
-                <button class="btn btn-secondary" onclick="revertSong(${song.id})">
-                    Revert
-                </button>
-                <button class="btn btn-danger" onclick="deleteSong(${song.id})">
-                    Delete Song
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-function toggleAddAudioForm(songId) {
-    const form = document.getElementById(`addAudioForm-${songId}`);
-    form.classList.toggle('active');
-    
-    if (form.classList.contains('active')) {
-        document.getElementById(`audioUrl-${songId}`).focus();
-    }
-}
-
-function toggleAddTokenForm(songId) {
-    const form = document.getElementById(`addTokenForm-${songId}`);
-    form.classList.toggle('active');
-    
-    if (form.classList.contains('active')) {
-        document.getElementById(`tokenSearch-${songId}`).focus();
-    }
-}
-
-async function addAudioFile(songId) {
-    const url = document.getElementById(`audioUrl-${songId}`).value.trim();
-    const type = document.getElementById(`audioType-${songId}`).value;
-    const cid = document.getElementById(`audioCid-${songId}`).value.trim();
-    
-    if (!url) {
-        showMessage('Please enter a file URL', 'error');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/songs/${songId}/audio-files`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                file_url: url,
-                file_type: type,
-                ipfs_cid: cid || null
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage('Audio file added successfully', 'success');
-            refreshSongData(songId);
-            toggleAddAudioForm(songId);
-        } else {
-            throw new Error(result.error || 'Failed to add audio file');
-        }
-    } catch (error) {
-        console.error('Add audio file error:', error);
-        showMessage(`Failed to add audio file: ${error.message}`, 'error');
-    }
-}
-
-async function deleteAudioFile(audioId, songId) {
-    if (!confirm('Are you sure you want to delete this audio file?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/audio-files/${audioId}`, {
-            method: 'DELETE'
-        });
-        
-        if (response.ok) {
-            showMessage('Audio file deleted successfully', 'success');
-            refreshSongData(songId);
-        } else {
-            throw new Error('Failed to delete audio file');
-        }
-    } catch (error) {
-        console.error('Delete audio file error:', error);
-        showMessage(`Failed to delete audio file: ${error.message}`, 'error');
-    }
-}
-
-let searchTimeouts = {};
-
-async function searchTokens(songId, query) {
-    if (searchTimeouts[songId]) {
-        clearTimeout(searchTimeouts[songId]);
-    }
-    
-    const resultsContainer = document.getElementById(`tokenResults-${songId}`);
-    
-    if (!query || query.length < 2) {
-        resultsContainer.style.display = 'none';
-        return;
-    }
-    
-    searchTimeouts[songId] = setTimeout(async () => {
-        try {
-            const response = await fetch(`/api/tokens/search?q=${encodeURIComponent(query)}`);
-            const tokens = await response.json();
-            
-            if (tokens.length > 0) {
-                resultsContainer.innerHTML = tokens.map(token => `
-                    <div class="search-result-item" onclick="selectToken(${songId}, ${token.id}, '${escapeHtml(token.asset_name)}')">
-                        <div><strong>${escapeHtml(token.asset_name)}</strong></div>
-                        <div style="font-size: 11px; color: #6c757d;">${token.policy_id.substring(0, 16)}...</div>
-                    </div>
-                `).join('');
-                resultsContainer.style.display = 'block';
-            } else {
-                resultsContainer.style.display = 'none';
-            }
-        } catch (error) {
-            console.error('Search tokens error:', error);
-            resultsContainer.style.display = 'none';
-        }
-    }, 300);
-}
-
-async function selectToken(songId, tokenId, tokenName) {
-    const searchInput = document.getElementById(`tokenSearch-${songId}`);
-    const resultsContainer = document.getElementById(`tokenResults-${songId}`);
-    const isPrimary = document.getElementById(`tokenPrimary-${songId}`).checked;
-    
-    searchInput.value = tokenName;
-    resultsContainer.style.display = 'none';
-    
-    try {
-        const response = await fetch(`/api/songs/${songId}/tokens/${tokenId}/link`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                is_primary: isPrimary
-            })
-        });
-        
-        if (response.ok) {
-            showMessage('Token linked successfully', 'success');
-            refreshSongData(songId);
-            toggleAddTokenForm(songId);
-        } else {
-            throw new Error('Failed to link token');
-        }
-    } catch (error) {
-        console.error('Link token error:', error);
-        showMessage(`Failed to link token: ${error.message}`, 'error');
-    }
-}
-
-async function unlinkToken(songId, tokenId) {
-    if (!confirm('Are you sure you want to unlink this token?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/songs/${songId}/tokens/${tokenId}/unlink`, {
-            method: 'DELETE'
-        });
-        
-        if (response.ok) {
-            showMessage('Token unlinked successfully', 'success');
-            refreshSongData(songId);
-        } else {
-            throw new Error('Failed to unlink token');
-        }
-    } catch (error) {
-        console.error('Unlink token error:', error);
-        showMessage(`Failed to unlink token: ${error.message}`, 'error');
-    }
-}
-
-async function refreshSongData(songId) {
-    try {
-        const response = await fetch(`/api/songs/${songId}`);
-        if (response.ok) {
-            const song = await response.json();
-            originalData[songId] = { ...song };
-            
-            const songCard = document.querySelector(`[data-song-id="${songId}"]`);
-            if (songCard) {
-                const newCard = createSongCard(song);
-                songCard.outerHTML = newCard;
-            }
-        }
-    } catch (error) {
-        console.error('Refresh song data error:', error);
-    }
-}
-
-function removeTag(element, songId) {
-    element.parentElement.remove();
-    markChanged(songId);
-}
-
-function addTag(event, containerId, songId) {
-    if (event.key === 'Enter' && event.target.value.trim()) {
-        const container = document.getElementById(containerId);
-        const input = event.target;
-        
-        const tag = document.createElement('div');
-        tag.className = 'tag';
-        tag.innerHTML = `
-            ${escapeHtml(input.value.trim())}
-            <span class="tag-remove" onclick="removeTag(this, ${songId})">×</span>
-        `;
-        
-        container.insertBefore(tag, input);
-        input.value = '';
-        markChanged(songId);
-    }
-}
-
-function markChanged(songId) {
-    StateManager.markSongChanged(songId);
-}
-
-function saveSong(songId) {
-    const changes = detectChanges(songId);
-    if (Object.keys(changes).length === 0) {
-        showMessage('No changes detected', 'info');
-        return;
-    }
-    
-    currentChanges = { songId, changes };
-    showSaveModal(changes);
-}
-
-function detectChanges(songId) {
-    const changes = {};
-    const card = document.querySelector(`[data-song-id="${songId}"]`);
-    
-    const titleInput = card.querySelector('[data-field="title"]');
-    if (titleInput && titleInput.value !== originalData[songId].title) {
-        changes.title = titleInput.value;
-    }
-    
-    const durationInput = card.querySelector('[data-field="duration"]');
-    if (durationInput && durationInput.value !== (originalData[songId].duration || '')) {
-        changes.duration = durationInput.value;
-    }
-    
-    const isrcInput = card.querySelector('[data-field="isrc"]');
-    if (isrcInput && isrcInput.value !== (originalData[songId].isrc || '')) {
-        changes.isrc = isrcInput.value;
-    }
-    
-    const iswcInput = card.querySelector('[data-field="iswc"]');
-    if (iswcInput && iswcInput.value !== (originalData[songId].iswc || '')) {
-        changes.iswc = iswcInput.value;
-    }
-    
-    const statusSelect = card.querySelector('[data-field="validation_status"]');
-    if (statusSelect && statusSelect.value !== originalData[songId].validation_status) {
-        changes.validation_status = statusSelect.value;
-    }
-    
-    const artistsContainer = document.getElementById(`artists-${songId}`);
-    const currentArtists = Array.from(artistsContainer.querySelectorAll('.tag'))
-        .map(tag => tag.textContent.replace('×', '').trim());
-    const originalArtists = (originalData[songId].artists || []).map(artist => 
-        typeof artist === 'object' ? artist.name : artist
-    );
-    
-    if (JSON.stringify(currentArtists.sort()) !== JSON.stringify(originalArtists.sort())) {
-        changes.artists = currentArtists;
-    }
-    
-    const genresContainer = document.getElementById(`genres-${songId}`);
-    const currentGenres = Array.from(genresContainer.querySelectorAll('.tag'))
-        .map(tag => tag.textContent.replace('×', '').trim());
-    const originalGenres = originalData[songId].genres || [];
-    
-    if (JSON.stringify(currentGenres.sort()) !== JSON.stringify(originalGenres.sort())) {
-        changes.genres = currentGenres;
-    }
-    
-    return changes;
-}
-
-function showSaveModal(changes) {
-    const changesList = document.getElementById('changesList');
-    changesList.innerHTML = '';
-    
-    const tableUpdates = [];
-    
-    if (changes.title || changes.duration || changes.validation_status || changes.isrc || changes.iswc) {
-        tableUpdates.push('metadata.songs table (basic info)');
-    }
-    
-    if (changes.artists) {
-        tableUpdates.push(`metadata.song_artists table (${changes.artists.length} artists)`);
-        tableUpdates.push('metadata.artists table (auto-create new artists)');
-    }
-    
-    if (changes.genres) {
-        tableUpdates.push(`metadata.song_genres table (${changes.genres.length} genres)`);
-        tableUpdates.push('metadata.genres table (auto-create new genres)');
-    }
-    
-    tableUpdates.forEach(update => {
-        const li = document.createElement('li');
-        li.textContent = update;
-        changesList.appendChild(li);
-    });
-    
-    document.getElementById('saveModal').style.display = 'block';
-}
-
-async function confirmSave() {
-    const { songId, changes } = currentChanges;
-    
-    showLoading();
-    
-    try {
-        const response = await fetch(`/api/songs/${songId}/update`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(changes)
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage('Changes saved successfully!', 'success');
-            
-            originalData[songId] = { ...originalData[songId], ...changes };
-            StateManager.refreshSongCard(songId);
-            
-            closeModal();
-            
-            setTimeout(async () => {
-                await Promise.all([loadQualityCounts(), loadStats()]);
-            }, 500);
-            
-        } else {
-            throw new Error(result.error || 'Failed to save changes');
-        }
-    } catch (error) {
-        console.error('Save error:', error);
-        showMessage('Error saving changes: ' + error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-function closeModal() {
-    document.getElementById('saveModal').style.display = 'none';
-}
-
-function revertSong(songId) {
-    const original = originalData[songId];
-    if (!original) return;
-    
-    StateManager.refreshSongCard(songId);
-}
-
-function showLoading() {
-    document.getElementById('loadingSpinner').style.display = 'block';
-}
-
-function hideLoading() {
-    document.getElementById('loadingSpinner').style.display = 'none';
-}
-
-function showMessage(message, type) {
-    const existingMessage = document.querySelector('.success-message, .error-message');
-    if (existingMessage) {
-        existingMessage.remove();
-    }
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = type === 'error' ? 'error-message' : 'success-message';
-    messageDiv.textContent = message;
-    
-    const firstContainer = document.querySelector('.container');
-    firstContainer.parentNode.insertBefore(messageDiv, firstContainer.nextSibling);
-    
-    setTimeout(() => {
-        messageDiv.remove();
-    }, 5000);
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text || '';
-    return div.innerHTML;
-}
-
-function showDeleteConfirmModal(text, confirmCallback) {
-    document.getElementById('deleteConfirmText').textContent = text;
-    document.getElementById('confirmDeleteBtn').onclick = confirmCallback;
-    document.getElementById('deleteConfirmModal').style.display = 'block';
-}
-
-function closeDeleteModal() {
-    document.getElementById('deleteConfirmModal').style.display = 'none';
-}
-
-function confirmDelete() {
-    
-}
-
-document.getElementById('searchInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        searchSongs();
-    }
-});
-
-document.addEventListener('DOMContentLoaded', async function() {
-    await Promise.all([loadStats(), loadQualityCounts()]);
-});
-
-document.addEventListener('click', function(event) {
-    const searchResults = document.querySelectorAll('.search-results');
-    searchResults.forEach(result => {
-        if (!result.closest('.search-dropdown').contains(event.target)) {
-            result.style.display = 'none';
-        }
-    });
-});
-
-window.onclick = function(event) {
-    const modals = ['saveModal', 'bulkModal', 'bulkEditModal', 'deleteConfirmModal'];
-    modals.forEach(modalId => {
-        const modal = document.getElementById(modalId);
-        if (event.target === modal) {
-            modal.style.display = 'none';
-        }
-    });
-}
-    </script>
+    <script src="/js/app.js"></script>
 </body>
 </html>
