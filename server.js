@@ -187,15 +187,6 @@ app.get('/api/genres/search', asyncHandler(async (req, res) => {
     res.json(result.rows);
 }));
 
-app.get('/api/contributors/search', asyncHandler(async (req, res) => {
-    const { q } = req.query;
-    const result = await pool.query(
-        'SELECT id, name, isni, ipi FROM metadata.contributors WHERE name ILIKE $1 ORDER BY name LIMIT 20',
-        [`%${q}%`]
-    );
-    res.json(result.rows);
-}));
-
 app.get('/api/songs/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -505,8 +496,16 @@ async function updateSongData(client, songId, changes) {
 }
 
 app.get('/api/quality/counts', asyncHandler(async (req, res) => {
-    const result = await pool.query('SELECT * FROM get_quality_counts()');
-    res.json(result.rows[0]);
+    const [baseResult, contributorsResult] = await Promise.all([
+        pool.query('SELECT * FROM get_quality_counts()'),
+        pool.query(`
+            SELECT COUNT(*)::BIGINT as no_contributors
+            FROM metadata.songs s
+            LEFT JOIN metadata.song_contributors sc ON s.id = sc.song_id
+            WHERE sc.song_id IS NULL
+        `)
+    ]);
+    res.json({ ...baseResult.rows[0], no_contributors: parseInt(contributorsResult.rows[0].no_contributors, 10) });
 }));
 
 app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
@@ -548,6 +547,13 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
             WHERE asongs.song_id IS NULL
             ORDER BY s.title LIMIT 100
         `,
+        'no-contributors': `
+            SELECT s.id as song_id, s.title as song_title
+            FROM metadata.songs s
+            LEFT JOIN metadata.song_contributors sc ON s.id = sc.song_id
+            WHERE sc.song_id IS NULL
+            ORDER BY s.title LIMIT 100
+        `,
         'no-copyright': 'SELECT * FROM find_songs_without_copyright(100)',
         'no-images': `
             SELECT a.id as asset_id, a.policy_id, a.asset_name
@@ -573,6 +579,8 @@ app.get('/api/quality/issues/:type', asyncHandler(async (req, res) => {
         'orphan-contributors': `
             SELECT c.id, c.name
             FROM metadata.contributor c
+            LEFT JOIN metadata.song_contributors sc ON c.id = sc.contributor_id
+            WHERE sc.contributor_id IS NULL
             ORDER BY c.name LIMIT 100
         `,
         'orphan-tokens': `
@@ -1549,28 +1557,20 @@ app.delete('/api/contributors/bulk-delete', asyncHandler(async (req, res) => {
         await client.query('BEGIN');
 
         const { ids } = req.body;
-
-        if (!ids || !Array.isArray(ids) || ids.length === 0) {
-            throw new Error('Invalid or empty IDs array');
-        }
-
-        const namesResult = await client.query(
-            'SELECT name FROM metadata.contributor WHERE id = ANY($1)',
-            [ids]
-        );
-
-        const deleteResult = await client.query(
-            'DELETE FROM metadata.contributor WHERE id = ANY($1)',
-            [ids]
+        const result = await bulkDeleteEntities(
+            client,
+            ids,
+            'metadata.contributor',
+            'metadata.song_contributors',
+            'contributor_id'
         );
 
         await client.query('COMMIT');
 
         res.json({
             success: true,
-            message: `Successfully deleted ${deleteResult.rowCount} contributors`,
-            deletedCount: deleteResult.rowCount,
-            deletedNames: namesResult.rows.map(row => row.name)
+            message: `Successfully deleted ${result.deletedCount} contributors`,
+            ...result
         });
 
     } catch (err) {
@@ -1584,25 +1584,13 @@ app.delete('/api/contributors/bulk-delete', asyncHandler(async (req, res) => {
 
 app.delete('/api/contributors/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
-
-    try {
-        const result = await pool.query(
-            'DELETE FROM metadata.contributor WHERE id = $1 RETURNING name',
-            [id]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Contributor not found' });
-        }
-
-        res.json({
-            success: true,
-            message: `Contributor "${result.rows[0].name}" deleted successfully`
-        });
-    } catch (err) {
-        console.error('Delete contributor error:', err);
-        res.status(500).json({ error: err.message });
-    }
+    const name = await deleteSingleEntity(
+        id,
+        'metadata.contributor',
+        'metadata.song_contributors',
+        'contributor_id'
+    );
+    res.json({ success: true, message: `Contributor "${name}" deleted successfully` });
 }));
 
 app.post('/api/tokens/bulk-add-audio', asyncHandler(async (req, res) => {

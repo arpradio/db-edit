@@ -9,6 +9,29 @@ let selectedSongsForLink = new Set();
 let selectedSongsForFix = new Set();
 let searchTimeout;
 
+// Runs a set of zero-arg refresh callbacks without letting a refresh failure
+// masquerade as a failure of the action that triggered it.
+async function safeRefresh(tasks) {
+    try {
+        await Promise.all(tasks.map(fn => fn()));
+    } catch (error) {
+        console.error('Post-action refresh failed:', error);
+    }
+}
+
+// Data quality counts and overall stats can change after almost any edit
+// (songs/artists/genres/contributors created, linked, or removed), so this
+// is the standard refresh to run after a successful mutation.
+function refreshCountsAndStats() {
+    return safeRefresh([QualityManager.loadQualityCounts, StatsManager.loadStats]);
+}
+
+// Re-fetches the currently open data-quality issue list, if one is open.
+function refreshCurrentIssues() {
+    if (!currentIssueType) return Promise.resolve();
+    return safeRefresh([() => QualityManager.loadDataIssues(currentIssueType)]);
+}
+
 class APIClient {
     static async get(url) {
         const response = await fetch(url);
@@ -101,6 +124,12 @@ class UIComponents {
         return `
             <div class="bulk-edit-header">
                 <button class="btn btn-primary" id="bulkEditToggle" onclick="BulkActionManager.toggleBulkEditMode()">Bulk Edit Mode</button>
+                <div id="bulkSelectAllContainer" style="display: none;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="bulkSelectAllSongs" onchange="BulkActionManager.toggleSelectAllSongs()">
+                        Select All
+                    </label>
+                </div>
                 <div id="bulkEditControls" style="display: none;">
                     <span id="selectedCount">0</span> songs selected
                     <button class="btn btn-primary" onclick="BulkActionManager.openBulkEditModal()">Edit Selected</button>
@@ -792,7 +821,8 @@ class QualityManager {
                 'orphanImagesCount': counts.orphan_images || 0,
                 'unprocessedTokensCount': counts.unprocessed_tokens || 0,
                 'failedTokensCount': counts.failed_tokens || 0,
-                'artistsNoIsniCount': counts.artists_no_isni || 0
+                'artistsNoIsniCount': counts.artists_no_isni || 0,
+                'noContributorsCount': counts.no_contributors || 0
             };
             
             Object.entries(elements).forEach(([id, count]) => {
@@ -848,22 +878,44 @@ class QualityManager {
         BulkActionManager.updateBulkActionsVisibility();
     }
 
+    // Issue types that list individual songs (as opposed to orphaned
+    // artists/genres/contributors/tokens/images) and can be bulk-deleted
+    // straight through the songs bulk-delete endpoint.
+    static isSongIssueType(issueType) {
+        const songIssueTypes = [
+            'no-artists', 'no-genres', 'no-audio', 'no-duration', 'no-isrc',
+            'no-iswc', 'no-tokens', 'no-copyright', 'no-contributors'
+        ];
+        return songIssueTypes.includes(issueType);
+    }
+
     static shouldShowBulkActions(issueType) {
-        return issueType.includes('orphan') || issueType.includes('unprocessed') || 
-               issueType.includes('failed') || issueType.includes('artists-no-isni');
+        return issueType.includes('orphan') || issueType.includes('unprocessed') ||
+               issueType.includes('failed') || issueType.includes('artists-no-isni') ||
+               QualityManager.isSongIssueType(issueType);
+    }
+
+    static getEntityTypeLabel(issueType) {
+        if (QualityManager.isSongIssueType(issueType)) return 'songs';
+        if (issueType.includes('artists')) return 'artists';
+        if (issueType.includes('genres')) return 'genres';
+        if (issueType.includes('contributors')) return 'contributors';
+        if (issueType.includes('tokens')) return 'tokens';
+        if (issueType.includes('images')) return 'images';
+        return 'items';
     }
 
     static createBulkActionsHTML(issueType) {
         const entityMap = {
             'orphan-artists': 'artists',
-            'orphan-genres': 'genres', 
+            'orphan-genres': 'genres',
             'orphan-contributors': 'contributors',
             'orphan-tokens': 'tokens',
             'orphan-images': 'images'
         };
-        
-        const entityType = entityMap[issueType] || 'items';
-        
+
+        const entityType = QualityManager.isSongIssueType(issueType) ? 'songs' : (entityMap[issueType] || 'items');
+
         let bulkButtons = `
             <button class="btn btn-small btn-danger" onclick="BulkActionManager.bulkDeleteSelected()">Delete Selected</button>
             <button class="btn btn-small btn-danger" onclick="BulkActionManager.bulkDeleteAll('${issueType}')">Delete All ${entityType}</button>
@@ -924,11 +976,13 @@ class QualityManager {
                     </div>
                 </div>
             `;
-        } else if (issueType.includes('songs') || issueType.includes('no-')) {
+        } else if (QualityManager.isSongIssueType(issueType)) {
+            const showCheckbox = true;
             return `
-                <div class="issue-item" onclick="SearchManager.editSongFromIssue(${issue.id})">
+                <div class="issue-item" data-item-id="${issue.id}" ${showCheckbox ? '' : `onclick="SearchManager.editSongFromIssue(${issue.id})"`}>
                     <div class="issue-content">
-                        <span class="issue-title">${UIComponents.escapeHtml(issue.title || issue.name)}</span>
+                        ${showCheckbox ? `<input type="checkbox" class="issue-checkbox" data-item-id="${issue.id}" onchange="BulkActionManager.toggleItemSelection(${issue.id})">` : ''}
+                        <span class="issue-title" ${showCheckbox ? `style="cursor: pointer;" onclick="SearchManager.editSongFromIssue(${issue.id})"` : ''}>${UIComponents.escapeHtml(issue.title || issue.name)}</span>
                         <span class="issue-id">ID: ${issue.id}</span>
                     </div>
                     <div class="issue-actions">
@@ -986,6 +1040,7 @@ class QualityManager {
             'no-isrc': 'Songs Without ISRC',
             'no-iswc': 'Songs Without ISWC',
             'no-tokens': 'Songs Without Tokens',
+            'no-contributors': 'Songs Without Contributors',
             'no-copyright': 'Songs Without Copyright',
             'no-images': 'Assets Without Images',
             'orphan-artists': 'Artists With No Songs',
@@ -1021,10 +1076,10 @@ class QualityManager {
             
             const endpoint = endpointMap[type] || 'artists';
             await APIClient.delete(`/api/${endpoint}/${id}`);
-            
+
             UIComponents.showMessage(`Deleted ${name} successfully`, 'success');
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Delete error:', error);
             UIComponents.showMessage(`Failed to delete ${name}: ${error.message}`, 'error');
@@ -1043,8 +1098,8 @@ class QualityManager {
         try {
             await APIClient.put(`/api/artists/${artistId}/isni`, { isni: isni.trim() });
             UIComponents.showMessage(`ISNI updated for "${artistName}"`, 'success');
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Update ISNI error:', error);
             UIComponents.showMessage(`Failed to update ISNI: ${error.message}`, 'error');
@@ -1056,20 +1111,35 @@ class BulkActionManager {
     static toggleBulkEditMode() {
         bulkEditMode = !bulkEditMode;
         const button = document.getElementById('bulkEditToggle');
-        
+        const selectAllContainer = document.getElementById('bulkSelectAllContainer');
+
         if (bulkEditMode) {
             button.textContent = 'Exit Bulk Edit';
             button.className = 'btn btn-secondary';
             selectedSongs.clear();
+            if (selectAllContainer) selectAllContainer.style.display = 'block';
+            const selectAllCheckbox = document.getElementById('bulkSelectAllSongs');
+            if (selectAllCheckbox) selectAllCheckbox.checked = false;
             BulkActionManager.updateBulkEditControls();
             BulkActionManager.addSongCheckboxes();
         } else {
             button.textContent = 'Bulk Edit Mode';
             button.className = 'btn btn-primary';
             selectedSongs.clear();
+            if (selectAllContainer) selectAllContainer.style.display = 'none';
             BulkActionManager.updateBulkEditControls();
             BulkActionManager.removeSongCheckboxes();
         }
+    }
+
+    static toggleSelectAllSongs() {
+        const selectAllCheckbox = document.getElementById('bulkSelectAllSongs');
+        const checkboxes = document.querySelectorAll('.song-checkbox');
+
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAllCheckbox.checked;
+            BulkActionManager.toggleSongSelection(checkbox.dataset.songId);
+        });
     }
 
     static addSongCheckboxes() {
@@ -1192,8 +1262,8 @@ class BulkActionManager {
             UIComponents.showMessage('No items selected', 'info');
             return;
         }
-        
-        const entityType = currentIssueType.includes('artists') ? 'artists' : 'genres';
+
+        const entityType = QualityManager.getEntityTypeLabel(currentIssueType);
         const selectedIds = Array.from(selectedItems);
         
         const selectedNames = selectedIds.map(id => {
@@ -1209,7 +1279,7 @@ class BulkActionManager {
     }
 
     static async bulkDeleteAll(issueType) {
-        const entityType = issueType.includes('artists') ? 'artists' : 'genres';
+        const entityType = QualityManager.getEntityTypeLabel(issueType);
         const allItems = document.querySelectorAll('.issue-item[data-item-id]');
         const allIds = Array.from(allItems).map(item => parseInt(item.dataset.itemId));
         const allNames = Array.from(allItems).map(item => item.querySelector('.issue-title').textContent);
@@ -1224,23 +1294,27 @@ class BulkActionManager {
     static async executeBulkDelete(issueType, ids) {
         UIComponents.showLoading();
         ModalManager.hide('bulkModal');
-        
+
         try {
-            const endpointMap = {
-                'orphan-artists': 'artists',
-                'orphan-genres': 'genres',
-                'orphan-contributors': 'contributors',
-                'orphan-tokens': 'tokens',
-                'orphan-images': 'images'
-            };
-            
-            const endpoint = endpointMap[issueType] || 'items';
-            await APIClient.deleteWithBody(`/api/${endpoint}/bulk-delete`, { ids });
-            
+            if (QualityManager.isSongIssueType(issueType)) {
+                await APIClient.deleteWithBody('/api/songs/bulk-delete', { ids });
+            } else {
+                const endpointMap = {
+                    'orphan-artists': 'artists',
+                    'orphan-genres': 'genres',
+                    'orphan-contributors': 'contributors',
+                    'orphan-tokens': 'tokens',
+                    'orphan-images': 'images'
+                };
+
+                const endpoint = endpointMap[issueType] || 'items';
+                await APIClient.deleteWithBody(`/api/${endpoint}/bulk-delete`, { ids });
+            }
+
             UIComponents.showMessage(`Successfully deleted ${ids.length} items`, 'success');
             selectedItems.clear();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Bulk delete error:', error);
             UIComponents.showMessage(`Failed to delete items: ${error.message}`, 'error');
@@ -1314,11 +1388,9 @@ class BulkActionManager {
             });
             
             BulkActionManager.toggleBulkEditMode();
-            
-            setTimeout(async () => {
-                await Promise.all([QualityManager.loadQualityCounts(), StatsManager.loadStats()]);
-            }, 500);
-            
+
+            await refreshCountsAndStats();
+
         } catch (error) {
             console.error('Bulk update error:', error);
             UIComponents.showMessage(`Failed to update songs: ${error.message}`, 'error');
@@ -1373,11 +1445,9 @@ class BulkActionManager {
             if (bulkEditMode) {
                 BulkActionManager.toggleBulkEditMode();
             }
-            
-            setTimeout(async () => {
-                await Promise.all([QualityManager.loadQualityCounts(), StatsManager.loadStats()]);
-            }, 500);
-            
+
+            await refreshCountsAndStats();
+
         } catch (error) {
             console.error('Bulk delete error:', error);
             UIComponents.showMessage(`Failed to delete songs: ${error.message}`, 'error');
@@ -1613,11 +1683,9 @@ class SongEditor {
             StateManager.refreshSongCard(songId);
             
             ModalManager.hide('saveModal');
-            
-            setTimeout(async () => {
-                await Promise.all([QualityManager.loadQualityCounts(), StatsManager.loadStats()]);
-            }, 500);
-            
+
+            await refreshCountsAndStats();
+
         } catch (error) {
             console.error('Save error:', error);
             UIComponents.showMessage('Error saving changes: ' + error.message, 'error');
@@ -1668,11 +1736,9 @@ class SongEditor {
                 const container = document.getElementById('songsContainer');
                 container.innerHTML = '<div class="empty-state" id="emptyState"><p>Use the search bar above to find songs to edit</p></div>';
             }
-            
-            setTimeout(async () => {
-                await Promise.all([QualityManager.loadQualityCounts(), StatsManager.loadStats()]);
-            }, 500);
-            
+
+            await refreshCountsAndStats();
+
         } catch (error) {
             console.error('Delete error:', error);
             UIComponents.showMessage(`Failed to delete song: ${error.message}`, 'error');
@@ -1796,6 +1862,7 @@ class RelationshipManager {
             UIComponents.showMessage('Audio file added successfully', 'success');
             RelationshipManager.refreshSongData(songId);
             RelationshipManager.toggleAddAudioForm(songId);
+            refreshCountsAndStats();
         } catch (error) {
             console.error('Add audio file error:', error);
             UIComponents.showMessage(`Failed to add audio file: ${error.message}`, 'error');
@@ -1811,6 +1878,7 @@ class RelationshipManager {
             await APIClient.delete(`/api/audio-files/${audioId}`);
             UIComponents.showMessage('Audio file deleted successfully', 'success');
             RelationshipManager.refreshSongData(songId);
+            refreshCountsAndStats();
         } catch (error) {
             console.error('Delete audio file error:', error);
             UIComponents.showMessage(`Failed to delete audio file: ${error.message}`, 'error');
@@ -1867,6 +1935,7 @@ class RelationshipManager {
             UIComponents.showMessage('Token linked successfully', 'success');
             RelationshipManager.refreshSongData(songId);
             RelationshipManager.toggleAddTokenForm(songId);
+            refreshCountsAndStats();
         } catch (error) {
             console.error('Link token error:', error);
             UIComponents.showMessage(`Failed to link token: ${error.message}`, 'error');
@@ -1882,6 +1951,7 @@ class RelationshipManager {
             await APIClient.delete(`/api/songs/${songId}/tokens/${tokenId}/unlink`);
             UIComponents.showMessage('Token unlinked successfully', 'success');
             RelationshipManager.refreshSongData(songId);
+            refreshCountsAndStats();
         } catch (error) {
             console.error('Unlink token error:', error);
             UIComponents.showMessage(`Failed to unlink token: ${error.message}`, 'error');
@@ -1909,8 +1979,8 @@ class TokenManager {
         try {
             await APIClient.post(`/api/tokens/${tokenId}/process`);
             UIComponents.showMessage(`Token "${tokenName}" marked as processed`, 'success');
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Process token error:', error);
             UIComponents.showMessage(`Failed to process token: ${error.message}`, 'error');
@@ -1934,8 +2004,8 @@ class TokenManager {
             
             UIComponents.showMessage(`Successfully processed ${selectedItems.size} tokens`, 'success');
             selectedItems.clear();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Bulk process error:', error);
             UIComponents.showMessage(`Failed to process tokens: ${error.message}`, 'error');
@@ -2074,6 +2144,8 @@ class TokenManager {
             // Clear search results and input
             document.getElementById(resultsContainerId).innerHTML = '';
             document.getElementById('linkNewSongTitle').value = '';
+
+            refreshCountsAndStats();
         } catch (error) {
             console.error('Create song error:', error);
             UIComponents.showMessage(`Failed to create song: ${error.message}`, 'error');
@@ -2148,8 +2220,8 @@ class TokenManager {
             
             UIComponents.showMessage(`Successfully linked token to ${result.linkedCount} songs`, 'success');
             TokenManager.closeLinkTokenModal();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Link token error:', error);
             UIComponents.showMessage(`Failed to link token: ${error.message}`, 'error');
@@ -2175,8 +2247,8 @@ class TokenManager {
             
             UIComponents.showMessage(result.message, 'success');
             TokenManager.closeFixTokenModal();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Fix token error:', error);
             UIComponents.showMessage(`Failed to fix token: ${error.message}`, 'error');
@@ -2254,12 +2326,11 @@ class TokenManager {
 
     static async saveTokenDetails() {
         const tokenId = document.getElementById('editTokenId').value;
-        const name = document.getElementById('editTokenName').value.trim();
         const policyId = document.getElementById('editTokenPolicyId').value.trim();
         const assetName = document.getElementById('editTokenAssetName').value.trim();
 
-        if (!name || !policyId || !assetName) {
-            UIComponents.showMessage('All fields are required', 'error');
+        if (!policyId || !assetName) {
+            UIComponents.showMessage('Policy ID and Asset Name are required', 'error');
             return;
         }
 
@@ -2267,15 +2338,14 @@ class TokenManager {
 
         try {
             const result = await APIClient.put(`/api/tokens/${tokenId}`, {
-                name,
                 policy_id: policyId,
                 asset_name: assetName
             });
 
             UIComponents.showMessage('Token details updated successfully', 'success');
             TokenManager.closeEditTokenModal();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Update token error:', error);
             UIComponents.showMessage(`Failed to update token: ${error.message}`, 'error');
@@ -2324,8 +2394,8 @@ class TokenManager {
             UIComponents.showMessage(`Successfully linked ${tokenIds.length} tokens to ${songIds.length} song(s)`, 'success');
             TokenManager.closeBulkLinkModal();
             selectedItems.clear();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Bulk link tokens error:', error);
             UIComponents.showMessage(`Failed to link tokens: ${error.message}`, 'error');
@@ -2426,6 +2496,7 @@ class TokenManager {
                     songId = result.song_id;
                     songTitle = title;
                     artists = 'No artists';
+                    refreshCountsAndStats();
                 }
 
                 // Add to selection
@@ -2564,8 +2635,8 @@ class TokenManager {
             UIComponents.showMessage(`Successfully updated ${updatedItems.join(', ')} for ${tokenIds.length} tokens`, 'success');
             TokenManager.closeBulkEditTokensModal();
             selectedItems.clear();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Bulk update tokens error:', error);
             UIComponents.showMessage(`Failed to update tokens: ${error.message}`, 'error');
@@ -2595,8 +2666,8 @@ class TokenManager {
 
             UIComponents.showMessage(`Successfully marked ${selectedItems.size} tokens as processed`, 'success');
             selectedItems.clear();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Bulk fix tokens error:', error);
             UIComponents.showMessage(`Failed to fix tokens: ${error.message}`, 'error');
@@ -2662,8 +2733,8 @@ class TokenManager {
             UIComponents.showMessage(`Successfully added image to ${tokenIds.length} tokens`, 'success');
             TokenManager.closeBulkAddImageModal();
             selectedItems.clear();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Bulk add image error:', error);
             UIComponents.showMessage(`Failed to add image: ${error.message}`, 'error');
@@ -2730,8 +2801,8 @@ class TokenManager {
             UIComponents.showMessage(result.message || `Successfully added audio to ${tokenIds.length} tokens`, 'success');
             TokenManager.closeBulkAddAudioModal();
             selectedItems.clear();
-            await QualityManager.loadDataIssues(currentIssueType);
-            await QualityManager.loadQualityCounts();
+            await refreshCurrentIssues();
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Bulk add audio error:', error);
             UIComponents.showMessage(`Failed to add audio: ${error.message}`, 'error');
@@ -3027,11 +3098,11 @@ class AssetManager {
             AssetManager.closeModal();
             AssetManager.editAsset(assetId);
 
-            // Refresh the issues list if we're on that view
-            if (typeof currentIssueType !== 'undefined' && currentIssueType === 'no-images') {
-                await QualityManager.loadDataIssues(currentIssueType);
-                await QualityManager.loadQualityCounts();
+            // Refresh the issues list if we're on that view, and counts/stats regardless
+            if (currentIssueType === 'no-images') {
+                await refreshCurrentIssues();
             }
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Link image error:', error);
             UIComponents.showMessage('Failed to link image', 'error');
@@ -3051,11 +3122,11 @@ class AssetManager {
             AssetManager.closeModal();
             AssetManager.editAsset(assetId);
 
-            // Refresh the issues list
-            if (typeof currentIssueType !== 'undefined' && currentIssueType === 'no-images') {
-                await QualityManager.loadDataIssues(currentIssueType);
-                await QualityManager.loadQualityCounts();
+            // Refresh the issues list if we're on that view, and counts/stats regardless
+            if (currentIssueType === 'no-images') {
+                await refreshCurrentIssues();
             }
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Unlink image error:', error);
             UIComponents.showMessage('Failed to unlink image', 'error');
@@ -3122,11 +3193,11 @@ class AssetManager {
             AssetManager.closeModal();
             AssetManager.editAsset(assetId);
 
-            // Refresh the issues list if we're on that view
-            if (typeof currentIssueType !== 'undefined' && currentIssueType === 'no-images') {
-                await QualityManager.loadDataIssues(currentIssueType);
-                await QualityManager.loadQualityCounts();
+            // Refresh the issues list if we're on that view, and counts/stats regardless
+            if (currentIssueType === 'no-images') {
+                await refreshCurrentIssues();
             }
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Link song error:', error);
             UIComponents.showMessage('Failed to link song', 'error');
@@ -3157,11 +3228,11 @@ class AssetManager {
             AssetManager.closeModal();
             AssetManager.editAsset(assetId);
 
-            // Refresh the issues list if we're on that view
-            if (typeof currentIssueType !== 'undefined' && currentIssueType === 'no-images') {
-                await QualityManager.loadDataIssues(currentIssueType);
-                await QualityManager.loadQualityCounts();
+            // Refresh the issues list if we're on that view, and counts/stats regardless
+            if (currentIssueType === 'no-images') {
+                await refreshCurrentIssues();
             }
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Create and link song error:', error);
             UIComponents.showMessage('Failed to create and link song', 'error');
@@ -3183,11 +3254,11 @@ class AssetManager {
             AssetManager.closeModal();
             AssetManager.editAsset(assetId);
 
-            // Refresh the issues list
-            if (typeof currentIssueType !== 'undefined' && currentIssueType === 'no-images') {
-                await QualityManager.loadDataIssues(currentIssueType);
-                await QualityManager.loadQualityCounts();
+            // Refresh the issues list if we're on that view, and counts/stats regardless
+            if (currentIssueType === 'no-images') {
+                await refreshCurrentIssues();
             }
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Unlink song error:', error);
             UIComponents.showMessage('Failed to unlink song', 'error');
@@ -3226,11 +3297,11 @@ class AssetManager {
             AssetManager.closeModal();
             AssetManager.editAsset(assetId);
 
-            // Refresh the issues list if we're on that view
-            if (typeof currentIssueType !== 'undefined' && currentIssueType === 'no-images') {
-                await QualityManager.loadDataIssues(currentIssueType);
-                await QualityManager.loadQualityCounts();
+            // Refresh the issues list if we're on that view, and counts/stats regardless
+            if (currentIssueType === 'no-images') {
+                await refreshCurrentIssues();
             }
+            await refreshCountsAndStats();
         } catch (error) {
             console.error('Create and link image error:', error);
             UIComponents.showMessage('Failed to create and link image', 'error');
