@@ -9,6 +9,33 @@
 
 </head>
 <body>
+    <header class="indexer-header" id="indexerHeader">
+        <div class="indexer-header-inner">
+            <div class="indexer-header-main">
+                <span class="indexer-header-title">Indexer</span>
+                <span id="indexerStatus" class="status-badge status-connecting">Connecting...</span>
+                <div class="indexer-progress" title="Sync progress">
+                    <div class="indexer-progress-track">
+                        <div class="indexer-progress-fill" id="indexerProgressBarFill"></div>
+                    </div>
+                    <span class="indexer-progress-percent" id="indexerProgressPercent">-</span>
+                </div>
+                <span class="indexer-metric">Indexer slot <strong id="indexerCurrentSlot">-</strong></span>
+                <span class="indexer-metric">Tip <strong id="indexerNetworkTip">-</strong></span>
+            </div>
+            <div class="indexer-header-meta" id="ogmiosHealthRow" hidden>
+                <span>Ogmios <strong id="ogmiosConnectionStatus">-</strong></span>
+                <span>Node sync <strong id="ogmiosNetworkSync">-</strong></span>
+                <span>Network <strong id="ogmiosNetwork">-</strong></span>
+                <span>Era <strong id="ogmiosEra">-</strong></span>
+                <span>Epoch <strong id="ogmiosEpoch">-</strong></span>
+                <span>Block <strong id="ogmiosBlockHeight">-</strong></span>
+                <span>Last tip <strong id="ogmiosLastTipUpdate">-</strong></span>
+                <span><strong id="ogmiosVersion">-</strong></span>
+            </div>
+        </div>
+    </header>
+
     <div class="container">
         <h1>Music Database Editor</h1>
         <div class="search-section">
@@ -299,86 +326,11 @@
         </div>
     </div>
 
-    <div id="tokenEditorModal" class="modal">
-        <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
-            <h3>Edit Token <span id="tokenEditorTitle"></span></h3>
-
-            <div class="form-section">
-                <h4>Token Metadata</h4>
-                <div class="form-group">
-                    <label for="tokenEditName">Name (read-only):</label>
-                    <input type="text" id="tokenEditName" class="form-input" disabled style="opacity: 0.6; cursor: not-allowed;" />
-                    <small style="color: #888; font-size: 11px;">Name is automatically derived from asset name or metadata</small>
-                </div>
-                <div class="form-group">
-                    <label for="tokenEditPolicyId">Policy ID:</label>
-                    <input type="text" id="tokenEditPolicyId" class="form-input" />
-                </div>
-                <div class="form-group">
-                    <label for="tokenEditAssetName">Asset Name:</label>
-                    <input type="text" id="tokenEditAssetName" class="form-input" />
-                </div>
-            </div>
-
-            <div class="form-section">
-                <h4>Artists (from linked songs)</h4>
-                <div id="tokenArtists" class="linked-items-list" style="min-height: 60px;">
-                    <div style="color: #888; font-style: italic; text-align: center; padding: 15px;">
-                        Artists appear here from linked songs. Link songs below to see artists.
-                    </div>
-                </div>
-                <p style="color: #888; font-size: 12px; margin-top: 8px;">
-                    To add/edit artists, link songs below and click "Edit Song" to manage their artists.
-                </p>
-            </div>
-
-            <div class="form-section">
-                <h4>Linked Songs</h4>
-                <div id="tokenLinkedSongs" class="linked-items-list"></div>
-
-                <h5 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px; color: #4CAF50;">Add Song by Title or URL</h5>
-                <div class="add-song-form" style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <input type="text" id="tokenNewSongTitle" class="form-input" placeholder="Song title or URL" style="flex: 1;" onkeypress="if(event.key==='Enter') addSongToTokenByTitle()" />
-                    <button class="btn btn-small btn-primary" onclick="addSongToTokenByTitle()">Add Song</button>
-                </div>
-                <p style="color: #888; font-size: 11px; margin-bottom: 15px;">
-                    If song exists, it will be linked. If not, a new song will be created.
-                </p>
-
-                <h5 style="margin-bottom: 10px; font-size: 14px; color: #4CAF50;">Or Search Existing Songs</h5>
-                <div class="search-container">
-                    <input type="text" id="tokenSongSearch" class="form-input" placeholder="Search existing songs..." oninput="searchSongsForToken(this.value)" />
-                    <div id="tokenSongResults" class="search-results"></div>
-                </div>
-            </div>
-
-            <div class="form-section">
-                <h4>Linked Images</h4>
-                <div id="tokenLinkedImages" class="linked-items-list"></div>
-                <div class="add-image-form">
-                    <input type="text" id="tokenImageUrl" class="form-input" placeholder="Image URL" />
-                    <select id="tokenImageType" class="form-input">
-                        <option value="cover">Cover</option>
-                        <option value="thumbnail">Thumbnail</option>
-                        <option value="banner">Banner</option>
-                    </select>
-                    <button class="btn btn-small btn-primary" onclick="addImageToToken()">Add Image</button>
-                </div>
-            </div>
-
-            <div class="modal-actions">
-                <button class="btn btn-primary" onclick="saveTokenMetadata()">Save Token Metadata</button>
-                <button class="btn btn-secondary" onclick="closeTokenEditor()">Close</button>
-            </div>
-        </div>
-    </div>
-
-
     <div id="loadingSpinner" class="loading-spinner">
         <div class="spinner"></div>
         <p>Loading...</p>
     </div>
 
-    <script src="/js/app.js"></script>
+    <script type="module" src="/js/main.js"></script>
 </body>
 </html>

@@ -72,6 +72,20 @@ When you edit a song's relationships, the application:
 - Single atomic transaction updates all affected tables
 - Rollback if any operation fails
 
+## Indexer Progress Relay
+
+The **Indexer** tab shows live sync status from `arp-indexer`. The server connects to the indexer's progress WebSocket and re-broadcasts it to the browser at `/ws/indexer`. Configure it in `.env`:
+
+| Variable | Default | Description |
+|---|---|---|
+| `INDEXER_ENABLED` | `true` | Set to `false` to disable the relay entirely |
+| `INDEXER_HOST` | `localhost` | Host running arp-indexer |
+| `INDEXER_PORT` | `3001` | Must match arp-indexer's `PROGRESS_PORT` |
+| `INDEXER_WS_URL` | — | Full URL (e.g. `wss://indexer.example.com`); overrides host/port |
+| `INDEXER_RECONNECT_MS` | `5000` | Delay before reconnecting after the upstream drops |
+| `OGMIOS_HEALTH_URL` | — | Ogmios `/health` endpoint (e.g. `http://host:1337/health`) shown in the header; unset to hide |
+| `OGMIOS_HEALTH_INTERVAL_MS` | `10000` | How often the server polls Ogmios health |
+
 ## File Structure
 
 ```

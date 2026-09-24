@@ -835,6 +835,130 @@ h1 {
 .status-verified { background: #6fcf97; }
 .status-pending { background: #ffa94d; }
 
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #444;
+    color: #ddd;
+}
+
+.status-badge.status-connected,
+.status-badge.status-caught_up { background: #6fcf97; color: #14351f; }
+
+.status-badge.status-disconnected,
+.status-badge.status-reconnecting { background: #e0a800; color: #3a2c00; }
+
+.status-badge.status-syncing,
+.status-badge.status-connecting,
+.status-badge.status-starting { background: #4a90d9; color: #0c2540; }
+
+.status-badge { text-transform: capitalize; }
+
+.indexer-header {
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    background: #252525;
+    border-bottom: 1px solid #3a3a3a;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    margin-bottom: 20px;
+    font-size: 13px;
+}
+
+.indexer-header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 8px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.indexer-header-main,
+.indexer-header-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+}
+
+.indexer-header-title {
+    font-weight: 600;
+    color: #4CAF50;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 12px;
+}
+
+.indexer-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 160px;
+    min-width: 120px;
+    max-width: 320px;
+}
+
+.indexer-progress-track {
+    flex: 1;
+    height: 6px;
+    background: #3a3a3a;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.indexer-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #4CAF50;
+    transition: width 0.3s;
+}
+
+.indexer-progress-percent {
+    font-variant-numeric: tabular-nums;
+    color: #ccc;
+    min-width: 52px;
+}
+
+.indexer-metric {
+    color: #aaa;
+}
+
+.indexer-metric strong,
+.indexer-header-meta strong {
+    color: #f1f1f1;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin-left: 2px;
+}
+
+.indexer-header-meta {
+    color: #888;
+    font-size: 12px;
+}
+
+.indexer-header-meta strong {
+    color: #ccc;
+    font-weight: 500;
+}
+
+.indexer-header-meta[hidden] {
+    display: none;
+}
+
+.indexer-header-meta .ogmios-unreachable {
+    color: #e0a800;
+}
+
+.indexer-header.indexer-offline .indexer-progress,
+.indexer-header.indexer-offline .indexer-metric,
+.indexer-header.indexer-offline .indexer-header-meta {
+    opacity: 0.45;
+}
+
 .modal {
     display: none;
     position: fixed;
@@ -911,6 +1035,89 @@ h1 {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.relation-collapse {
+    margin-top: 16px;
+}
+
+.relation-collapse-summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    padding: 4px 6px;
+    margin: 0 -6px 0;
+    border-radius: 4px;
+}
+
+.relation-collapse-summary::-webkit-details-marker {
+    display: none;
+}
+
+.relation-collapse-summary:hover {
+    background: #414141;
+}
+
+.relation-collapse-summary:focus-visible {
+    outline: 2px solid #66b2ff;
+    outline-offset: 1px;
+}
+
+.relation-collapse-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.relation-collapse-label::before {
+    content: '';
+    width: 0;
+    height: 0;
+    border-left: 5px solid #aaa;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.15s;
+}
+
+.relation-collapse[open] .relation-collapse-label::before {
+    transform: rotate(90deg);
+}
+
+.relation-collapse-hint {
+    font-size: 12px;
+    font-weight: 400;
+    color: #999;
+}
+
+.relation-collapse-body {
+    margin-top: 8px;
+}
+
+.relation-filter {
+    width: 100%;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #f1f1f1;
+    font-size: 13px;
+}
+
+.relation-filter:focus {
+    outline: none;
+    border-color: #66b2ff;
+}
+
+.relation-item[hidden],
+.relation-filter-empty[hidden] {
+    display: none;
+}
+
+.relation-filter-empty {
+    font-size: 13px;
+    color: #999;
+    padding: 6px 2px;
 }
 
 .relations-title.missing-relation {
@@ -1124,6 +1331,16 @@ h1 {
 }
 
 @media (max-width: 768px) {
+    .indexer-header-inner {
+        padding: 8px 16px;
+    }
+
+    .indexer-progress {
+        flex-basis: 100%;
+        max-width: none;
+        order: 1;
+    }
+
     .container {
         margin: 10px;
         padding: 16px;
