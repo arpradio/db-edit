@@ -103,6 +103,29 @@ export class SongEditor {
         return changes;
     }
 
+    // Re-applies unsaved edits (from detectChanges) onto a freshly rendered card
+    static applyChanges(songId, changes) {
+        const card = document.querySelector(`[data-song-id="${songId}"]`);
+        if (!card || Object.keys(changes).length === 0) return;
+
+        Object.entries(changes).forEach(([field, value]) => {
+            if (field === 'artists' || field === 'genres') {
+                const container = document.getElementById(`${field}-${songId}`);
+                if (container) StateManager.rebuildTagContainer(container, value, songId, field === 'artists' ? 'artist' : 'genre');
+                return;
+            }
+            const input = card.querySelector(`[data-field="${field}"]`);
+            if (!input) return;
+            if (input.type === 'checkbox') {
+                input.checked = value;
+            } else {
+                input.value = value;
+            }
+        });
+
+        StateManager.markSongChanged(songId);
+    }
+
     static async confirmSave() {
         const { songId, changes } = state.currentChanges;
         

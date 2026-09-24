@@ -1,6 +1,18 @@
 import { APIClient } from './api.js';
 import { UIComponents } from './ui.js';
 import { state, refreshCountsAndStats } from './state.js';
+import { SongEditor } from './song-editor.js';
+
+// Role is free text in the DB; these are suggestions, with "Other..." for anything else
+const CONTRIBUTOR_ROLE_GROUPS = {
+    Performance: ['performer', 'featured artist', 'vocalist', 'backing vocalist', 'instrumentalist', 'DJ', 'remixer'],
+    Writing: ['composer', 'lyricist', 'songwriter', 'arranger'],
+    Production: ['producer', 'co-producer', 'recording engineer', 'mixing engineer', 'mastering engineer'],
+    Business: ['publisher', 'label']
+};
+const CUSTOM_ROLE_VALUE = '__custom';
+
+let contributorSearchTimeout = null;
 
 export class RelationshipManager {
     static createRelationsSection(song, audioFiles, tokens) {
@@ -40,9 +52,190 @@ export class RelationshipManager {
                     </div>
                 `).join('')}
                 
+                ${RelationshipManager.createContributorsSection(song, song.contributors || [])}
+
                 ${RelationshipManager.createTokensSection(song, tokens)}
             </div>
         `;
+    }
+
+    static createContributorsSection(song, contributors) {
+        const sorted = [...contributors].sort((a, b) =>
+            (a.role || '').localeCompare(b.role || '') || (a.name || '').localeCompare(b.name || ''));
+
+        return `
+                <div class="relations-title" style="margin-top: 16px;">
+                    Contributors (${contributors.length})
+                    <button class="btn btn-small btn-primary" onclick="RelationshipManager.toggleAddContributorForm(${song.id})">Add Contributor</button>
+                </div>
+
+                <div id="addContributorForm-${song.id}" class="add-form">
+                    <div class="form-row">
+                        <select id="contributorRole-${song.id}" onchange="RelationshipManager.onContributorRoleChange(${song.id})">
+                            <option value="" selected disabled>Select role...</option>
+                            ${Object.entries(CONTRIBUTOR_ROLE_GROUPS).map(([group, roles]) => `
+                                <optgroup label="${group}">
+                                    ${roles.map(role => `<option value="${role}">${role}</option>`).join('')}
+                                </optgroup>
+                            `).join('')}
+                            <option value="${CUSTOM_ROLE_VALUE}">Other...</option>
+                        </select>
+                        <input type="text" placeholder="Custom role" id="contributorRoleCustom-${song.id}" hidden>
+                    </div>
+                    <div class="form-row">
+                        <div class="search-dropdown">
+                            <input type="text" placeholder="Search or create contributor..." id="contributorSearch-${song.id}"
+                                   oninput="RelationshipManager.searchContributors(${song.id}, this.value)"
+                                   onkeydown="if (event.key === 'Escape') RelationshipManager.toggleAddContributorForm(${song.id})"
+                                   autocomplete="off">
+                            <div class="search-results" id="contributorResults-${song.id}"></div>
+                        </div>
+                        <button class="btn btn-small btn-secondary" onclick="RelationshipManager.toggleAddContributorForm(${song.id})">Cancel</button>
+                    </div>
+                </div>
+
+                ${sorted.map(contributor => `
+                    <div class="relation-item">
+                        <div class="relation-info">
+                            <div class="relation-type">${UIComponents.escapeHtml(contributor.role)}</div>
+                            <div class="relation-name">${UIComponents.escapeHtml(contributor.name)}</div>
+                            ${contributor.ipi || contributor.isni ? `
+                                <div class="relation-meta">
+                                    ${contributor.ipi ? `IPI: ${UIComponents.escapeHtml(contributor.ipi)}` : ''}
+                                    ${contributor.ipi && contributor.isni ? ' · ' : ''}
+                                    ${contributor.isni ? `ISNI: ${UIComponents.escapeHtml(contributor.isni)}` : ''}
+                                </div>` : ''}
+                        </div>
+                        <div class="relation-actions">
+                            <button class="btn btn-small btn-danger"
+                                    data-role="${UIComponents.escapeHtml(contributor.role)}"
+                                    data-name="${UIComponents.escapeHtml(contributor.name)}"
+                                    onclick="RelationshipManager.unlinkContributor(${song.id}, ${contributor.id}, this.dataset.role, this.dataset.name)">Unlink</button>
+                        </div>
+                    </div>
+                `).join('')}`;
+    }
+
+    static toggleAddContributorForm(songId) {
+        const form = document.getElementById(`addContributorForm-${songId}`);
+        form.classList.toggle('active');
+
+        if (form.classList.contains('active')) {
+            document.getElementById(`contributorSearch-${songId}`).focus();
+        } else {
+            document.getElementById(`contributorResults-${songId}`).style.display = 'none';
+        }
+    }
+
+    static searchContributors(songId, query) {
+        clearTimeout(contributorSearchTimeout);
+        const resultsContainer = document.getElementById(`contributorResults-${songId}`);
+        const trimmed = query.trim();
+
+        if (trimmed.length < 2) {
+            resultsContainer.style.display = 'none';
+            return;
+        }
+
+        contributorSearchTimeout = setTimeout(async () => {
+            try {
+                const contributors = await APIClient.get(`/api/contributors/search?q=${encodeURIComponent(trimmed)}`);
+
+                const exactMatch = contributors.some(c => (c.name || '').toLowerCase() === trimmed.toLowerCase());
+                resultsContainer.innerHTML = contributors.map(contributor => `
+                    <div class="search-result-item" onclick="RelationshipManager.selectContributor(${songId}, ${contributor.id})">
+                        <div><strong>${UIComponents.escapeHtml(contributor.name)}</strong></div>
+                        ${contributor.ipi || contributor.isni ? `
+                            <div style="font-size: 11px; color: #6c757d;">
+                                ${contributor.ipi ? `IPI ${UIComponents.escapeHtml(contributor.ipi)}` : ''}
+                                ${contributor.isni ? `ISNI ${UIComponents.escapeHtml(contributor.isni)}` : ''}
+                            </div>` : ''}
+                    </div>
+                `).join('') + (exactMatch ? '' : `
+                    <div class="search-result-item search-result-create" onclick="RelationshipManager.createAndLinkContributor(${songId})">
+                        + Create "${UIComponents.escapeHtml(trimmed)}"
+                    </div>
+                `);
+                resultsContainer.style.display = 'block';
+            } catch (error) {
+                console.error('Search contributors error:', error);
+                resultsContainer.style.display = 'none';
+            }
+        }, 300);
+    }
+
+    static onContributorRoleChange(songId) {
+        const isCustom = document.getElementById(`contributorRole-${songId}`).value === CUSTOM_ROLE_VALUE;
+        const customInput = document.getElementById(`contributorRoleCustom-${songId}`);
+        customInput.hidden = !isCustom;
+        if (isCustom) customInput.focus();
+    }
+
+    // Returns null (and prompts) when no role has been chosen yet
+    static getContributorRole(songId) {
+        const select = document.getElementById(`contributorRole-${songId}`);
+        const role = select.value === CUSTOM_ROLE_VALUE
+            ? document.getElementById(`contributorRoleCustom-${songId}`).value.trim()
+            : select.value;
+
+        if (!role) {
+            UIComponents.showMessage('Choose a role for this contributor first', 'error');
+            (select.value === CUSTOM_ROLE_VALUE ? document.getElementById(`contributorRoleCustom-${songId}`) : select).focus();
+            return null;
+        }
+        return role;
+    }
+
+    static async selectContributor(songId, contributorId) {
+        const role = RelationshipManager.getContributorRole(songId);
+        if (!role) return;
+        await RelationshipManager.linkContributor(songId, contributorId, role);
+    }
+
+    static async createAndLinkContributor(songId) {
+        const name = document.getElementById(`contributorSearch-${songId}`).value.trim();
+        if (!name) return;
+        // Check the role before creating, so a missing role doesn't leave an unlinked contributor behind
+        const role = RelationshipManager.getContributorRole(songId);
+        if (!role) return;
+
+        try {
+            const result = await APIClient.post('/api/contributors', { name });
+            await RelationshipManager.linkContributor(songId, result.contributor.id, role);
+        } catch (error) {
+            console.error('Create contributor error:', error);
+            UIComponents.showMessage(`Failed to create contributor: ${error.message}`, 'error');
+        }
+    }
+
+    static async linkContributor(songId, contributorId, role) {
+        document.getElementById(`contributorResults-${songId}`).style.display = 'none';
+
+        try {
+            await APIClient.post(`/api/songs/${songId}/contributors/${contributorId}/link`, { role });
+            UIComponents.showMessage('Contributor linked successfully', 'success');
+            await RelationshipManager.refreshSongData(songId);
+            refreshCountsAndStats();
+        } catch (error) {
+            console.error('Link contributor error:', error);
+            UIComponents.showMessage(`Failed to link contributor: ${error.message}`, 'error');
+        }
+    }
+
+    static async unlinkContributor(songId, contributorId, role, name) {
+        if (!confirm(`Remove ${name ? `"${name}"` : 'this contributor'} (${role}) from this song?`)) {
+            return;
+        }
+
+        try {
+            await APIClient.delete(`/api/songs/${songId}/contributors/${contributorId}/unlink?role=${encodeURIComponent(role)}`);
+            UIComponents.showMessage('Contributor removed successfully', 'success');
+            await RelationshipManager.refreshSongData(songId);
+            refreshCountsAndStats();
+        } catch (error) {
+            console.error('Unlink contributor error:', error);
+            UIComponents.showMessage(`Failed to remove contributor: ${error.message}`, 'error');
+        }
     }
 
     // Tokens can number in the dozens, so the list is collapsed by default behind a summary row.
@@ -258,15 +451,19 @@ export class RelationshipManager {
     static async refreshSongData(songId, { expandTokens = false } = {}) {
         try {
             const song = await APIClient.get(`/api/songs/${songId}`);
-            state.originalData[songId] = { ...song };
-            
             const songCard = document.querySelector(`[data-song-id="${songId}"]`);
+
+            // Capture unsaved field edits before originalData is replaced, since detectChanges diffs against it
+            const pendingChanges = songCard && state.dirtySongs.has(songId) ? SongEditor.detectChanges(songId) : {};
+            state.originalData[songId] = { ...song };
+
             if (songCard) {
                 // Re-rendering the card would otherwise snap the token list back to collapsed
                 const wasExpanded = document.getElementById(`tokensCollapse-${songId}`)?.open;
                 songCard.outerHTML = UIComponents.createSongCard(song);
                 const collapse = document.getElementById(`tokensCollapse-${songId}`);
                 if (collapse && (wasExpanded || expandTokens)) collapse.open = true;
+                SongEditor.applyChanges(songId, pendingChanges);
             }
         } catch (error) {
             console.error('Refresh song data error:', error);

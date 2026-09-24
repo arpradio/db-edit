@@ -1,7 +1,8 @@
 import { APIClient } from './api.js';
 import { UIComponents } from './ui.js';
 import { BulkActionManager } from './bulk-actions.js';
-import { state } from './state.js';
+import { state, clearDirtySongs } from './state.js';
+import { GlobalSave } from './global-save.js';
 
 export class SearchManager {
     static async searchSongs() {
@@ -10,6 +11,7 @@ export class SearchManager {
             UIComponents.showMessage('Please enter a search term', 'info');
             return;
         }
+        if (!GlobalSave.confirmDiscard('Run a new search')) return;
         
         state.lastSearchQuery = query;
         UIComponents.showLoading();
@@ -52,6 +54,7 @@ export class SearchManager {
         }
         
         container.innerHTML = UIComponents.createBulkEditHeader() + songs.map(song => UIComponents.createSongCard(song)).join('');
+        clearDirtySongs();
         
         songs.forEach(song => {
             state.originalData[song.id] = { ...song };
@@ -63,6 +66,7 @@ export class SearchManager {
     }
 
     static clearResults() {
+        if (!GlobalSave.confirmDiscard('Clear results')) return;
         const container = document.getElementById('songsContainer');
         
         container.innerHTML = '<div class="empty-state" id="emptyState"><p>Use the search bar above to find songs to edit</p></div>';
@@ -70,6 +74,7 @@ export class SearchManager {
         document.getElementById('searchInput').value = '';
         state.lastSearchQuery = '';
         state.originalData = {};
+        clearDirtySongs();
         state.selectedSongs.clear();
         BulkActionManager.updateBulkEditControls();
     }
@@ -82,6 +87,7 @@ export class SearchManager {
     }
 
     static async editSongFromIssue(songId, retryCount = 0) {
+        if (retryCount === 0 && !GlobalSave.confirmDiscard('Open this song')) return;
         UIComponents.showLoading();
         
         try {

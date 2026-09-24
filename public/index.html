@@ -326,6 +326,30 @@
         </div>
     </div>
 
+    <div id="saveAllModal" class="modal">
+        <div class="modal-content modal-wide">
+            <h3 id="saveAllTitle">Save all changes</h3>
+            <p class="save-all-note">All changes are saved together. If any song fails, nothing is saved.</p>
+            <div id="saveAllList" class="save-all-list"></div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="saveAllConfirm" onclick="GlobalSave.confirmSaveAll()">Save All</button>
+                <button class="btn btn-secondary" onclick="GlobalSave.closeReview()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="globalSaveBar" class="global-save-bar" hidden>
+        <div class="global-save-inner">
+            <span class="global-save-dot"></span>
+            <span id="globalSaveCount" class="global-save-count"></span>
+            <kbd class="global-save-hint">Ctrl+S</kbd>
+            <div class="global-save-actions">
+                <button class="btn btn-secondary" onclick="GlobalSave.discardAll()">Discard All</button>
+                <button class="btn btn-success" onclick="GlobalSave.reviewAll()">Review &amp; Save All</button>
+            </div>
+        </div>
+    </div>
+
     <div id="loadingSpinner" class="loading-spinner">
         <div class="spinner"></div>
         <p>Loading...</p>

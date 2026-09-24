@@ -10,6 +10,7 @@ import { TokenManager } from './tokens.js';
 import { AssetManager } from './assets.js';
 import { StatsManager } from './stats.js';
 import { IndexerPanel } from './indexer.js';
+import { GlobalSave } from './global-save.js';
 
 // These classes are invoked as bare `ClassName.method(...)` from inline
 // onclick/onchange/oninput attributes in index.html and in HTML strings
@@ -22,6 +23,7 @@ window.SongEditor = SongEditor;
 window.RelationshipManager = RelationshipManager;
 window.TokenManager = TokenManager;
 window.AssetManager = AssetManager;
+window.GlobalSave = GlobalSave;
 
 // Thin global wrappers for the bare function names index.html calls directly.
 window.showTab = function showTab(tabName) {
@@ -126,7 +128,7 @@ document.addEventListener('click', function (event) {
 });
 
 window.onclick = function (event) {
-    const modals = ['saveModal', 'bulkModal', 'bulkEditModal', 'deleteConfirmModal', 'linkTokenModal', 'fixTokenModal', 'bulkTokenLinkModal', 'editTokenModal', 'bulkEditTokensModal', 'bulkAddImageModal', 'bulkAddAudioModal'];
+    const modals = ['saveModal', 'saveAllModal', 'bulkModal', 'bulkEditModal', 'deleteConfirmModal', 'linkTokenModal', 'fixTokenModal', 'bulkTokenLinkModal', 'editTokenModal', 'bulkEditTokensModal', 'bulkAddImageModal', 'bulkAddAudioModal'];
     modals.forEach(modalId => {
         const modal = document.getElementById(modalId);
         if (modal && event.target === modal) {
@@ -136,3 +138,4 @@ window.onclick = function (event) {
 };
 
 IndexerPanel.init();
+GlobalSave.init();

@@ -1,8 +1,22 @@
+// Surfaces the server's { error } message instead of a bare status code when available.
+async function parseResponse(response) {
+    if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+            const body = await response.json();
+            if (body && body.error) message = body.error;
+        } catch {
+            // Non-JSON error body; keep the status code message
+        }
+        throw new Error(message);
+    }
+    return response.json();
+}
+
 export class APIClient {
     static async get(url) {
         const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        return parseResponse(response);
     }
 
     static async post(url, data) {
@@ -11,8 +25,7 @@ export class APIClient {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        return parseResponse(response);
     }
 
     static async put(url, data) {
@@ -21,14 +34,12 @@ export class APIClient {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        return parseResponse(response);
     }
 
     static async delete(url) {
         const response = await fetch(url, { method: 'DELETE' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        return parseResponse(response);
     }
 
     static async deleteWithBody(url, data) {
@@ -37,7 +48,6 @@ export class APIClient {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        return parseResponse(response);
     }
 }

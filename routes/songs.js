@@ -11,7 +11,8 @@ router.get('/search', asyncHandler(async (req, res) => {
                array_agg(DISTINCT jsonb_build_object('name', a.name, 'isni', a.isni)) FILTER (WHERE a.name IS NOT NULL) as artists,
                array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL) as genres,
                array_agg(DISTINCT jsonb_build_object('id', af.id, 'url', af.file_url, 'type', af.file_type)) FILTER (WHERE af.id IS NOT NULL) as audio_files,
-               array_agg(DISTINCT jsonb_build_object('id', mt.id, 'name', mt.name, 'policy_id', mt.policy_id, 'asset_name', mt.asset_name)) FILTER (WHERE mt.id IS NOT NULL) as tokens
+               array_agg(DISTINCT jsonb_build_object('id', mt.id, 'name', mt.name, 'policy_id', mt.policy_id, 'asset_name', mt.asset_name)) FILTER (WHERE mt.id IS NOT NULL) as tokens,
+               array_agg(DISTINCT jsonb_build_object('id', c.id, 'name', c.name, 'ipi', c.ipi, 'isni', c.isni, 'role', sc.role)) FILTER (WHERE c.id IS NOT NULL) as contributors
         FROM metadata.songs s
         LEFT JOIN metadata.song_artists sa ON s.id = sa.song_id
         LEFT JOIN metadata.artists a ON sa.artist_id = a.id
@@ -20,6 +21,8 @@ router.get('/search', asyncHandler(async (req, res) => {
         LEFT JOIN metadata.audio_files af ON s.id = af.song_id
         LEFT JOIN metadata.assets_songs asongs ON s.id = asongs.song_id
         LEFT JOIN cip60.music_tokens mt ON asongs.asset_id = mt.id
+        LEFT JOIN metadata.song_contributors sc ON s.id = sc.song_id
+        LEFT JOIN metadata.contributor c ON sc.contributor_id = c.id
         WHERE s.title ILIKE $1 OR a.name ILIKE $1 OR g.name ILIKE $1
         GROUP BY s.id, s.title, s.duration, s.validation_status, s.isrc, s.iswc, s.is_explicit, s.is_ai_generated
         ORDER BY s.title
@@ -58,7 +61,8 @@ router.get('/:id', asyncHandler(async (req, res) => {
                array_agg(DISTINCT jsonb_build_object('name', a.name, 'isni', a.isni)) FILTER (WHERE a.name IS NOT NULL) as artists,
                array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL) as genres,
                array_agg(DISTINCT jsonb_build_object('id', af.id, 'url', af.file_url, 'type', af.file_type, 'ipfs_cid', af.ipfs_cid)) FILTER (WHERE af.id IS NOT NULL) as audio_files,
-               array_agg(DISTINCT jsonb_build_object('id', mt.id, 'name', mt.name, 'policy_id', mt.policy_id, 'asset_name', mt.asset_name)) FILTER (WHERE mt.id IS NOT NULL) as tokens
+               array_agg(DISTINCT jsonb_build_object('id', mt.id, 'name', mt.name, 'policy_id', mt.policy_id, 'asset_name', mt.asset_name)) FILTER (WHERE mt.id IS NOT NULL) as tokens,
+               array_agg(DISTINCT jsonb_build_object('id', c.id, 'name', c.name, 'ipi', c.ipi, 'isni', c.isni, 'role', sc.role)) FILTER (WHERE c.id IS NOT NULL) as contributors
         FROM metadata.songs s
         LEFT JOIN metadata.song_artists sa ON s.id = sa.song_id
         LEFT JOIN metadata.artists a ON sa.artist_id = a.id
@@ -67,6 +71,8 @@ router.get('/:id', asyncHandler(async (req, res) => {
         LEFT JOIN metadata.audio_files af ON s.id = af.song_id
         LEFT JOIN metadata.assets_songs asongs ON s.id = asongs.song_id
         LEFT JOIN cip60.music_tokens mt ON asongs.asset_id = mt.id
+        LEFT JOIN metadata.song_contributors sc ON s.id = sc.song_id
+        LEFT JOIN metadata.contributor c ON sc.contributor_id = c.id
         WHERE s.id = $1
         GROUP BY s.id, s.title, s.duration, s.validation_status, s.isrc, s.iswc, s.is_explicit, s.is_ai_generated
     `;
@@ -133,6 +139,45 @@ router.post('/bulk-update', asyncHandler(async (req, res) => {
         await client.query('ROLLBACK');
         console.error('Bulk update error:', err);
         res.status(500).json({ error: 'Failed to update songs: ' + err.message });
+    } finally {
+        client.release();
+    }
+}));
+
+// Saves different changes for many songs at once, all-or-nothing in one transaction
+router.post('/batch-update', asyncHandler(async (req, res) => {
+    const { updates } = req.body;
+
+    if (!Array.isArray(updates) || updates.length === 0) {
+        return res.status(400).json({ error: 'updates must be a non-empty array of { songId, changes }' });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        for (const { songId, changes } of updates) {
+            try {
+                await updateSongData(client, songId, changes || {});
+            } catch (err) {
+                err.message = `song ${songId}: ${err.message}`;
+                throw err;
+            }
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: `Successfully updated ${updates.length} songs`,
+            updatedSongs: updates.map(update => update.songId)
+        });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Batch update error:', err);
+        res.status(500).json({ error: 'No changes were saved. Failed on ' + err.message });
     } finally {
         client.release();
     }
@@ -389,6 +434,43 @@ router.post('/:songId/audio-files', asyncHandler(async (req, res) => {
         console.error('Add audio file error:', err);
         res.status(500).json({ error: err.message });
     }
+}));
+
+router.post('/:songId/contributors/:contributorId/link', asyncHandler(async (req, res) => {
+    const { songId, contributorId } = req.params;
+    const role = (req.body.role || '').trim() || 'contributor';
+
+    const result = await pool.query(
+        'INSERT INTO metadata.song_contributors (song_id, contributor_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [songId, contributorId, role]
+    );
+
+    if (result.rowCount === 0) {
+        return res.status(409).json({ error: `Contributor is already linked as "${role}"` });
+    }
+
+    res.json({ success: true, message: 'Contributor linked to song successfully' });
+}));
+
+// Role is part of the key: the same contributor can hold several roles on one song
+router.delete('/:songId/contributors/:contributorId/unlink', asyncHandler(async (req, res) => {
+    const { songId, contributorId } = req.params;
+    const { role } = req.query;
+
+    if (!role) {
+        return res.status(400).json({ error: 'role query parameter is required' });
+    }
+
+    const result = await pool.query(
+        'DELETE FROM metadata.song_contributors WHERE song_id = $1 AND contributor_id = $2 AND role = $3',
+        [songId, contributorId, role]
+    );
+
+    if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'Contributor link not found' });
+    }
+
+    res.json({ success: true, message: 'Contributor unlinked from song successfully' });
 }));
 
 router.post('/:songId/tokens/:tokenId/link', asyncHandler(async (req, res) => {

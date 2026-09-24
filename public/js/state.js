@@ -12,8 +12,21 @@ export const state = {
     currentIssueType: '',
     selectedSongsForLink: new Set(),
     selectedSongsForFix: new Set(),
-    searchTimeout: null
+    searchTimeout: null,
+    // Song ids with edits not yet saved; GlobalSave prunes ids whose edits were undone by hand
+    dirtySongs: new Set()
 };
+
+export const DIRTY_CHANGED_EVENT = 'songs:dirty-changed';
+
+export function notifyDirtyChanged() {
+    document.dispatchEvent(new CustomEvent(DIRTY_CHANGED_EVENT));
+}
+
+export function clearDirtySongs() {
+    state.dirtySongs.clear();
+    notifyDirtyChanged();
+}
 
 // Runs a set of zero-arg refresh callbacks without letting a refresh failure
 // masquerade as a failure of the action that triggered it.
@@ -61,6 +74,12 @@ export class StateManager {
         const statusSelect = card.querySelector('[data-field="validation_status"]');
         if (statusSelect) statusSelect.value = song.validation_status;
 
+        const explicitCheckbox = card.querySelector('[data-field="is_explicit"]');
+        if (explicitCheckbox) explicitCheckbox.checked = !!song.is_explicit;
+
+        const aiGeneratedCheckbox = card.querySelector('[data-field="is_ai_generated"]');
+        if (aiGeneratedCheckbox) aiGeneratedCheckbox.checked = !!song.is_ai_generated;
+
         const statusIndicator = card.querySelector('.status-indicator');
         if (statusIndicator) {
             statusIndicator.className = `status-indicator status-${song.validation_status}`;
@@ -76,8 +95,14 @@ export class StateManager {
             StateManager.rebuildTagContainer(genresContainer, song.genres || [], songId, 'genre');
         }
 
+        StateManager.markSongClean(songId);
+    }
+
+    static markSongClean(songId) {
+        const card = document.querySelector(`[data-song-id="${songId}"]`);
         StateManager.resetSaveButton(songId);
-        card.classList.remove('changed');
+        if (card) card.classList.remove('changed');
+        if (state.dirtySongs.delete(songId)) notifyDirtyChanged();
     }
 
     static rebuildTagContainer(container, items, songId, type) {
@@ -119,5 +144,8 @@ export class StateManager {
             saveButton.className = 'btn btn-success';
             saveButton.textContent = 'Save Changes*';
         }
+
+        state.dirtySongs.add(songId);
+        notifyDirtyChanged();
     }
 }

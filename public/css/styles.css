@@ -90,7 +90,12 @@ body {
     gap: 8px;
 }
 
-.search-results .search-result-item {
+.search-results .search-result-create {
+    color: #6fcf97;
+    font-weight: 500;
+}
+
+.search-result-item {
     padding: 12px;
     cursor: pointer;
     border-bottom: 1px solid #444;
@@ -1272,6 +1277,11 @@ h1 {
     position: relative;
 }
 
+.form-row .search-dropdown {
+    flex: 1;
+    display: flex;
+}
+
 .search-results {
     position: absolute;
     top: 100%;
@@ -1428,5 +1438,159 @@ h1 {
     .relation-actions {
         width: 100%;
         justify-content: flex-end;
+    }
+}
+
+/* Global save bar + save-all review */
+.global-save-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 950;
+    background: #252525;
+    border-top: 2px solid #4CAF50;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.4);
+}
+
+.global-save-bar[hidden] {
+    display: none;
+}
+
+body.has-global-save-bar {
+    padding-bottom: 72px;
+}
+
+.global-save-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.global-save-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #e0a800;
+    flex-shrink: 0;
+}
+
+.global-save-count {
+    font-weight: 600;
+    color: #f1f1f1;
+}
+
+.global-save-hint {
+    font-family: inherit;
+    font-size: 11px;
+    color: #aaa;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 1px 6px;
+}
+
+.global-save-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+.modal-content.modal-wide {
+    max-width: 720px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.save-all-note {
+    font-size: 13px;
+    color: #aaa;
+    margin-bottom: 12px;
+}
+
+.save-all-list {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.save-all-song {
+    background: #383838;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.save-all-song-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.save-all-song-id {
+    font-weight: 400;
+    font-size: 12px;
+    color: #999;
+}
+
+.save-all-change {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
+    font-size: 13px;
+    padding: 3px 0;
+    align-items: baseline;
+}
+
+.save-all-field {
+    color: #aaa;
+}
+
+.save-all-old {
+    color: #e57373;
+    text-decoration: line-through;
+    word-break: break-word;
+}
+
+.save-all-arrow {
+    color: #777;
+}
+
+.save-all-new {
+    color: #6fcf97;
+    word-break: break-word;
+}
+
+@media (max-width: 768px) {
+    .global-save-inner {
+        padding: 10px 16px;
+    }
+
+    .global-save-hint {
+        display: none;
+    }
+
+    .global-save-actions {
+        width: 100%;
+    }
+
+    .global-save-actions .btn {
+        flex: 1;
+    }
+
+    body.has-global-save-bar {
+        padding-bottom: 110px;
+    }
+
+    .save-all-change {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .save-all-arrow {
+        display: none;
     }
 }
