@@ -3,6 +3,101 @@ import { UIComponents } from './ui.js';
 import { ModalManager } from './modals.js';
 import { state, refreshCountsAndStats, refreshCurrentIssues } from './state.js';
 
+// CIP-25 splits strings longer than 64 bytes into arrays of chunks.
+function metaText(value) {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return value.every(v => typeof v === 'string') ? value.join('') : '';
+    if (typeof value === 'object') return '';
+    return String(value).trim();
+}
+
+// Artists/genres appear as strings, {name} objects, or objects keyed by name.
+function metaList(value) {
+    if (!value) return [];
+    const items = Array.isArray(value) ? value : [value];
+    return items.map(item => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+            return metaText(item.name) || Object.keys(item)[0] || '';
+        }
+        return metaText(item);
+    }).filter(Boolean);
+}
+
+function metaBool(value) {
+    return value === true || value === 1 || String(value).toLowerCase() === 'true';
+}
+
+const AUDIO_TYPES = {
+    'audio/mpeg': 'mp3', 'audio/mp3': 'mp3',
+    'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav',
+    'audio/flac': 'flac', 'audio/x-flac': 'flac',
+    'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'm4a'
+};
+
+// Every object carrying a `files` array is treated as an asset/release node,
+// regardless of how deep the policy/asset-name wrapping goes.
+function findAssetNodes(node, found = []) {
+    if (!node || typeof node !== 'object') return found;
+    if (Array.isArray(node)) {
+        node.forEach(child => findAssetNodes(child, found));
+        return found;
+    }
+    if (Array.isArray(node.files)) found.push(node);
+    Object.entries(node).forEach(([key, child]) => {
+        if (key !== 'files') findAssetNodes(child, found);
+    });
+    return found;
+}
+
+// Turns CIP-60 token metadata into one song-form prefill per audio track.
+function parseTokenTracks(metadata, fallbackTitle) {
+    const tracks = [];
+
+    findAssetNodes(metadata).forEach(asset => {
+        const release = (asset.release && typeof asset.release === 'object') ? asset.release : {};
+        const releaseArtists = metaList(asset.artists || release.artists);
+        const releaseGenres = metaList(release.genres || asset.genres);
+
+        asset.files.forEach(file => {
+            if (!file || typeof file !== 'object') return;
+            const mediaType = metaText(file.mediaType).toLowerCase();
+            const song = (file.song && typeof file.song === 'object') ? file.song : file;
+            if (!mediaType.startsWith('audio') && !song.song_title) return;
+
+            const src = metaText(file.src);
+            const cidMatch = src.match(/^ipfs:\/\/(?:ipfs\/)?(.+)$/i);
+            const songArtists = metaList(song.artists);
+            const songGenres = metaList(song.genres);
+
+            tracks.push({
+                title: metaText(song.song_title) || metaText(file.name) || metaText(release.release_title) || metaText(asset.name),
+                artists: songArtists.length ? songArtists : releaseArtists,
+                genres: songGenres.length ? songGenres : releaseGenres,
+                duration: metaText(song.song_duration || song.duration),
+                isrc: metaText(song.isrc),
+                iswc: metaText(song.iswc),
+                explicit: metaBool(song.explicit || song.parental_advisory),
+                ai: metaBool(song.ai_generated || song.is_ai_generated),
+                audioUrl: src,
+                audioType: AUDIO_TYPES[mediaType] || 'unknown',
+                audioCid: cidMatch ? cidMatch[1] : ''
+            });
+        });
+    });
+
+    if (tracks.length === 0) {
+        tracks.push({
+            title: fallbackTitle || '', artists: [], genres: [], duration: '', isrc: '', iswc: '',
+            explicit: false, ai: false, audioUrl: '', audioType: 'mp3', audioCid: ''
+        });
+    }
+
+    return tracks;
+}
+
+// Parsed tracks for the currently open create-song form, keyed by modal prefix.
+const metadataTracks = {};
+
 export class TokenManager {
     static async processToken(tokenId, tokenName) {
         try {
@@ -54,6 +149,7 @@ export class TokenManager {
         state.selectedSongsForLink.clear();
         
         ModalManager.show('linkTokenModal');
+        TokenManager.loadCreateSongForm('link', tokenId, tokenName);
     }
 
     static async showFixTokenModal(tokenId, tokenName) {
@@ -68,6 +164,166 @@ export class TokenManager {
         state.selectedSongsForFix.clear();
         
         ModalManager.show('fixTokenModal');
+        TokenManager.loadCreateSongForm('fix', tokenId, tokenName);
+    }
+
+    static async loadCreateSongForm(prefix, tokenId, tokenName) {
+        const status = document.getElementById(`${prefix}CreateStatus`);
+        let metadata = null;
+
+        try {
+            const tokenData = await APIClient.get(`/api/tokens/${tokenId}`);
+            metadata = tokenData.metadata;
+        } catch (error) {
+            console.error('Failed to load token metadata:', error);
+        }
+
+        const tracks = parseTokenTracks(metadata, tokenName);
+        metadataTracks[prefix] = tracks;
+
+        if (!metadata) {
+            status.textContent = 'No metadata available for this token. Enter song details manually.';
+        } else if (!tracks.some(t => t.audioUrl)) {
+            status.textContent = 'No audio tracks could be parsed from the metadata. Check the JSON below and enter details manually.';
+        } else {
+            status.textContent = `Parsed ${tracks.length} track(s) from token metadata. Review and edit before creating.`;
+        }
+
+        document.getElementById(`${prefix}CreateTrack`).innerHTML = tracks.map((t, i) =>
+            `<option value="${i}">${i + 1}. ${UIComponents.escapeHtml(t.title || 'Untitled')}</option>`
+        ).join('');
+        document.getElementById(`${prefix}CreateTrackRow`).style.display = tracks.length > 1 ? '' : 'none';
+
+        const allBtn = document.getElementById(`${prefix}CreateAllBtn`);
+        allBtn.style.display = tracks.length > 1 ? '' : 'none';
+        allBtn.textContent = `Create All ${tracks.length} Tracks`;
+
+        document.querySelector(`#${prefix}CreateJson code`).textContent =
+            metadata ? JSON.stringify(metadata, null, 2) : 'No metadata';
+
+        TokenManager.prefillCreateSongForm(prefix, 0);
+    }
+
+    static prefillCreateSongForm(prefix, index) {
+        const track = (metadataTracks[prefix] || [])[index];
+        if (!track) return;
+
+        const set = (name, value) => { document.getElementById(`${prefix}Create${name}`).value = value; };
+        set('Title', track.title);
+        set('Artists', track.artists.join(', '));
+        set('Genres', track.genres.join(', '));
+        set('Duration', track.duration);
+        set('Isrc', track.isrc);
+        set('Iswc', track.iswc);
+        set('AudioUrl', track.audioUrl);
+        set('AudioType', track.audioType);
+        set('AudioCid', track.audioCid);
+        document.getElementById(`${prefix}CreateExplicit`).checked = track.explicit;
+        document.getElementById(`${prefix}CreateAi`).checked = track.ai;
+    }
+
+    static toggleCreateSongMetadata(prefix, button) {
+        const pre = document.getElementById(`${prefix}CreateJson`);
+        const hidden = pre.style.display === 'none';
+        pre.style.display = hidden ? 'block' : 'none';
+        button.textContent = hidden ? 'Hide' : 'Show';
+    }
+
+    static readCreateSongForm(prefix) {
+        const get = name => document.getElementById(`${prefix}Create${name}`).value.trim();
+        const split = value => value.split(',').map(v => v.trim()).filter(Boolean);
+        return {
+            title: get('Title'),
+            artists: split(get('Artists')),
+            genres: split(get('Genres')),
+            duration: get('Duration'),
+            isrc: get('Isrc'),
+            iswc: get('Iswc'),
+            explicit: document.getElementById(`${prefix}CreateExplicit`).checked,
+            ai: document.getElementById(`${prefix}CreateAi`).checked,
+            audioUrl: get('AudioUrl'),
+            audioType: get('AudioType'),
+            audioCid: get('AudioCid')
+        };
+    }
+
+    // Creates the song server-side (already linked to the token) and adds it to
+    // the host modal's selection so the modal's main action treats it like any
+    // other chosen song.
+    static async createSongForToken(prefix, track, isPrimary) {
+        const tokenId = document.getElementById(`${prefix}TokenId`).value;
+        const result = await APIClient.post(`/api/tokens/${tokenId}/create-song`, {
+            title: track.title,
+            artists: track.artists,
+            genres: track.genres,
+            duration: track.duration,
+            isrc: track.isrc,
+            iswc: track.iswc,
+            is_explicit: track.explicit,
+            is_ai_generated: track.ai,
+            is_primary: isPrimary,
+            audio_files: track.audioUrl
+                ? [{ file_url: track.audioUrl, file_type: track.audioType, ipfs_cid: track.audioCid }]
+                : []
+        });
+
+        const isFix = prefix === 'fix';
+        const selectedSet = isFix ? state.selectedSongsForFix : state.selectedSongsForLink;
+        const listContainerId = isFix ? 'fixSelectedSongsList' : 'selectedSongsList';
+        const songId = result.song_id;
+
+        selectedSet.add(songId);
+        const songItem = document.createElement('div');
+        songItem.className = 'selected-song-item';
+        songItem.innerHTML = `
+            <span>${UIComponents.escapeHtml(track.title)} - ${UIComponents.escapeHtml(track.artists.join(', ') || 'No artists')} <em style="color: #4CAF50;">(new, linked)</em></span>
+            <button class="btn btn-small btn-danger" onclick="TokenManager.removeSongFromSelection(${songId}, '${listContainerId}')">Remove</button>
+        `;
+        document.getElementById(listContainerId).appendChild(songItem);
+        return result;
+    }
+
+    static async createSongFromForm(prefix) {
+        const track = TokenManager.readCreateSongForm(prefix);
+        if (!track.title) {
+            UIComponents.showMessage('Song title is required', 'error');
+            return;
+        }
+
+        UIComponents.showLoading();
+        try {
+            const selectedSet = prefix === 'fix' ? state.selectedSongsForFix : state.selectedSongsForLink;
+            await TokenManager.createSongForToken(prefix, track, selectedSet.size === 0);
+            UIComponents.showMessage(`Song "${track.title}" created and linked to token`, 'success');
+            refreshCountsAndStats();
+        } catch (error) {
+            console.error('Create song from metadata error:', error);
+            UIComponents.showMessage(`Failed to create song: ${error.message}`, 'error');
+        } finally {
+            UIComponents.hideLoading();
+        }
+    }
+
+    static async createAllTracksFromMetadata(prefix) {
+        const tracks = (metadataTracks[prefix] || []).filter(t => t.title);
+        if (tracks.length === 0) return;
+        if (!confirm(`Create ${tracks.length} new songs from the token metadata and link them to this token?`)) return;
+
+        UIComponents.showLoading();
+        let created = 0;
+        try {
+            for (const [i, track] of tracks.entries()) {
+                await TokenManager.createSongForToken(prefix, track, i === 0);
+                created++;
+            }
+            UIComponents.showMessage(`Created and linked ${created} songs`, 'success');
+        } catch (error) {
+            console.error('Create all tracks error:', error);
+            UIComponents.showMessage(`Created ${created} of ${tracks.length} songs, then failed: ${error.message}`, 'error');
+        } finally {
+            refreshCountsAndStats();
+            UIComponents.hideLoading();
+        }
     }
 
     static async searchSongsForToken(query, tokenId, resultsContainerId) {

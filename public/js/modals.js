@@ -56,6 +56,75 @@ export class ModalManager {
         ModalManager.show('saveModal');
     }
 
+    // Collapsible "create song" form for a token whose metadata failed to
+    // produce songs. Prefilled from the token's parsed metadata, editable by
+    // hand. `prefix` namespaces the element ids per host modal (link/fix).
+    static createSongFromTokenSection(prefix) {
+        const id = name => `${prefix}Create${name}`;
+        const field = (label, name, placeholder) => `
+            <div class="metadata-row">
+                <span class="metadata-label">${label}:</span>
+                <div class="metadata-value">
+                    <input type="text" id="${id(name)}" class="editable-field" placeholder="${placeholder}">
+                </div>
+            </div>`;
+
+        return `
+            <details id="${id('Section')}" style="margin: 15px 0; border: 1px solid #444; border-radius: 6px; padding: 10px;">
+                <summary style="cursor: pointer; font-size: 14px; color: #4CAF50; font-weight: bold;">Create New Song from Token Metadata</summary>
+                <div style="margin-top: 12px;">
+                    <p id="${id('Status')}" style="color: #888; font-size: 12px; margin-bottom: 10px;">Loading token metadata...</p>
+
+                    <div class="metadata-row" id="${id('TrackRow')}" style="display: none;">
+                        <span class="metadata-label">Prefill from:</span>
+                        <div class="metadata-value">
+                            <select id="${id('Track')}" class="editable-field" onchange="TokenManager.prefillCreateSongForm('${prefix}', this.value)"></select>
+                        </div>
+                    </div>
+
+                    ${field('Title *', 'Title', 'Song title')}
+                    ${field('Artists', 'Artists', 'Comma-separated')}
+                    ${field('Genres', 'Genres', 'Comma-separated')}
+                    ${field('Duration', 'Duration', 'e.g. PT3M21S')}
+                    ${field('ISRC', 'Isrc', 'ISRC')}
+                    ${field('ISWC', 'Iswc', 'ISWC')}
+                    ${field('Audio URL', 'AudioUrl', 'ipfs://... or https://...')}
+
+                    <div class="metadata-row">
+                        <span class="metadata-label">Audio Type:</span>
+                        <div class="metadata-value">
+                            <select id="${id('AudioType')}" class="editable-field">
+                                <option value="mp3">MP3</option>
+                                <option value="wav">WAV</option>
+                                <option value="flac">FLAC</option>
+                                <option value="m4a">M4A</option>
+                                <option value="unknown">Unknown</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    ${field('IPFS CID', 'AudioCid', 'IPFS CID (optional)')}
+
+                    <div class="metadata-row" style="gap: 16px;">
+                        <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="${id('Explicit')}"> Explicit</label>
+                        <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="${id('Ai')}"> AI Generated</label>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin: 10px 0;">
+                        <button class="btn btn-small btn-success" onclick="TokenManager.createSongFromForm('${prefix}')">Create &amp; Select Song</button>
+                        <button class="btn btn-small btn-primary" id="${id('AllBtn')}" style="display: none;" onclick="TokenManager.createAllTracksFromMetadata('${prefix}')"></button>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="metadata-label" style="margin: 0;">Full Metadata (JSON):</span>
+                        <button class="btn btn-small btn-secondary" onclick="TokenManager.toggleCreateSongMetadata('${prefix}', this)">Show</button>
+                    </div>
+                    <pre id="${id('Json')}" style="display: none; background: #1a1a1a; padding: 12px; border-radius: 4px; overflow-x: auto; max-height: 300px; margin: 8px 0 0;"><code></code></pre>
+                </div>
+            </details>
+        `;
+    }
+
     static createLinkTokenModal() {
         const existing = document.getElementById('linkTokenModal');
         if (existing) existing.remove();
@@ -80,6 +149,8 @@ export class ModalManager {
                 <div id="songSearchResults" class="search-results-modal"></div>
             </div>
 
+            ${ModalManager.createSongFromTokenSection('link')}
+
             <div id="selectedSongsList" class="selected-songs-list"></div>
         `, `
             <button class="btn btn-primary" onclick="TokenManager.linkTokenToSongs()">Link Selected Songs</button>
@@ -100,6 +171,8 @@ export class ModalManager {
                        oninput="TokenManager.searchSongsForToken(this.value, document.getElementById('fixTokenId').value, 'fixSongSearchResults')">
                 <div id="fixSongSearchResults" class="search-results-modal"></div>
             </div>
+
+            ${ModalManager.createSongFromTokenSection('fix')}
 
             <div id="fixSelectedSongsList" class="selected-songs-list"></div>
 

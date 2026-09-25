@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { asyncHandler } = require('../lib/dbHelpers');
+const { updateSongData } = require('../lib/songData');
 
 const router = express.Router();
 
@@ -260,6 +261,76 @@ router.post('/:tokenId/link-song', asyncHandler(async (req, res) => {
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Link song to token error:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+}));
+
+// Creates a brand-new song from manually entered (or metadata-prefilled)
+// fields and links it to the token. Used for orphaned/failed tokens whose
+// metadata the indexer could not turn into songs on its own.
+router.post('/:tokenId/create-song', asyncHandler(async (req, res) => {
+    const { tokenId } = req.params;
+    const { title, audio_files = [], is_primary = false, ...fields } = req.body;
+
+    if (!title || !title.trim()) {
+        return res.status(400).json({ error: 'title is required' });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        const tokenResult = await client.query('SELECT id FROM cip60.assets WHERE id = $1', [tokenId]);
+        if (tokenResult.rows.length === 0) {
+            throw new Error('Token not found');
+        }
+
+        const newSong = await client.query(
+            'INSERT INTO metadata.songs (title, validation_status) VALUES ($1, $2) RETURNING id',
+            [title.trim(), 'draft']
+        );
+        const songId = newSong.rows[0].id;
+
+        const { duration, isrc, iswc, is_explicit, is_ai_generated, artists, genres } = fields;
+        await updateSongData(client, songId, {
+            duration: duration || undefined,
+            isrc: isrc || undefined,
+            iswc: iswc || undefined,
+            is_explicit,
+            is_ai_generated,
+            artists: Array.isArray(artists) && artists.length ? artists : undefined,
+            genres: Array.isArray(genres) && genres.length ? genres : undefined
+        });
+
+        let audioFilesAdded = 0;
+        for (const file of audio_files) {
+            if (!file || !file.file_url) continue;
+            await client.query(
+                'INSERT INTO metadata.audio_files (song_id, file_url, file_type, ipfs_cid) VALUES ($1, $2, $3, $4)',
+                [songId, file.file_url, file.file_type || 'unknown', file.ipfs_cid || null]
+            );
+            audioFilesAdded++;
+        }
+
+        await client.query(
+            'INSERT INTO metadata.assets_songs (asset_id, song_id, is_primary) VALUES ($1, $2, $3) ON CONFLICT (asset_id, song_id) DO NOTHING',
+            [tokenId, songId, !!is_primary]
+        );
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: `Song "${title.trim()}" created and linked to token`,
+            song_id: songId,
+            audioFilesAdded
+        });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Create song for token error:', err);
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
