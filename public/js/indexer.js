@@ -1,4 +1,9 @@
+import { APIClient } from './api.js';
+
 const RECONNECT_INTERVAL_MS = 4000;
+// Once polling has taken over, retry the WebSocket less often
+const FALLBACK_RECONNECT_INTERVAL_MS = 30000;
+const POLL_INTERVAL_MS = 5000;
 // Slots of lag still treated as synced (roughly one block interval)
 const SYNCED_SLOT_TOLERANCE = 60;
 
@@ -17,6 +22,9 @@ export class IndexerPanel {
     static relayConnected = false;
     static upstreamConnected = null;
     static synced = null;
+    // HTTP polling stands in when a proxy or tunnel won't carry the WebSocket (common over WAN)
+    static pollTimer = null;
+    static pollConnected = false;
 
     static init() {
         IndexerPanel.connect();
@@ -29,6 +37,7 @@ export class IndexerPanel {
 
         socket.addEventListener('open', () => {
             IndexerPanel.relayConnected = true;
+            IndexerPanel.stopPolling();
             IndexerPanel.renderStatus();
         });
 
@@ -43,6 +52,7 @@ export class IndexerPanel {
 
         socket.addEventListener('close', () => {
             IndexerPanel.relayConnected = false;
+            IndexerPanel.startPolling();
             IndexerPanel.renderStatus();
             IndexerPanel.scheduleReconnect();
         });
@@ -54,10 +64,36 @@ export class IndexerPanel {
 
     static scheduleReconnect() {
         if (IndexerPanel.reconnectTimer) return;
+        const delay = IndexerPanel.pollConnected ? FALLBACK_RECONNECT_INTERVAL_MS : RECONNECT_INTERVAL_MS;
         IndexerPanel.reconnectTimer = setTimeout(() => {
             IndexerPanel.reconnectTimer = null;
             IndexerPanel.connect();
-        }, RECONNECT_INTERVAL_MS);
+        }, delay);
+    }
+
+    static startPolling() {
+        if (IndexerPanel.pollTimer) return;
+        IndexerPanel.poll();
+        IndexerPanel.pollTimer = setInterval(IndexerPanel.poll, POLL_INTERVAL_MS);
+    }
+
+    static stopPolling() {
+        clearInterval(IndexerPanel.pollTimer);
+        IndexerPanel.pollTimer = null;
+        IndexerPanel.pollConnected = false;
+    }
+
+    static async poll() {
+        try {
+            const status = await APIClient.get('/api/indexer/status');
+            if (!IndexerPanel.pollTimer) return; // WebSocket took over while this was in flight
+            IndexerPanel.pollConnected = true;
+            IndexerPanel.upstreamConnected = status.enabled ? status.upstreamConnected : false;
+            status.messages.forEach(message => IndexerPanel.handleMessage(message));
+        } catch (error) {
+            IndexerPanel.pollConnected = false;
+        }
+        IndexerPanel.renderStatus();
     }
 
     static handleMessage(message) {
@@ -76,7 +112,9 @@ export class IndexerPanel {
         let label;
         let statusClass;
 
-        if (!IndexerPanel.relayConnected) {
+        const reachable = IndexerPanel.relayConnected || IndexerPanel.pollConnected;
+
+        if (!reachable) {
             label = 'Relay offline';
             statusClass = 'disconnected';
         } else if (IndexerPanel.upstreamConnected === false) {
@@ -97,11 +135,13 @@ export class IndexerPanel {
         if (badge) {
             badge.textContent = label;
             badge.className = `status-badge status-${statusClass}`;
+            badge.title = IndexerPanel.relayConnected ? 'Live (WebSocket)'
+                : IndexerPanel.pollConnected ? `Polling every ${POLL_INTERVAL_MS / 1000}s (WebSocket unavailable)` : '';
         }
 
         const header = document.getElementById('indexerHeader');
         if (header) {
-            const offline = !IndexerPanel.relayConnected || IndexerPanel.upstreamConnected === false;
+            const offline = !reachable || IndexerPanel.upstreamConnected === false;
             header.classList.toggle('indexer-offline', offline);
         }
     }

@@ -12,7 +12,12 @@ assertAuthConfigured(authConfig);
 const auth = createAuth(authConfig);
 
 // Set TRUST_PROXY (e.g. "1") when running behind a reverse proxy so login rate limiting sees real client IPs
-if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY);
+// ("1" = trust one proxy hop, "true" = trust all, or a comma-separated list of proxy IPs/subnets)
+if (process.env.TRUST_PROXY) {
+    const raw = process.env.TRUST_PROXY.trim();
+    const value = /^\d+$/.test(raw) ? parseInt(raw, 10) : raw === 'true' ? true : raw === 'false' ? false : raw;
+    app.set('trust proxy', value);
+}
 app.disable('x-powered-by');
 
 app.use(securityHeaders);
@@ -34,13 +39,20 @@ app.use('/api/contributors', require('./routes/contributors'));
 app.use('/api/quality', require('./routes/quality'));
 app.use('/api', require('./routes/stats'));
 
+// Polling fallback for the indexer header when the WebSocket can't get through a proxy
+let indexerRelay = null;
+app.get('/api/indexer/status', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(indexerRelay ? indexerRelay.snapshot() : { enabled: false, messages: [] });
+});
+
 app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
     res.status(500).json({ error: 'Internal server error: ' + err.message });
 });
 
 const server = http.createServer(app);
-attachIndexerRelay(server, indexerConfig, auth.isUpgradeAuthorized);
+indexerRelay = attachIndexerRelay(server, indexerConfig, auth.isUpgradeAuthorized);
 
 server.listen(PORT, () => {
     console.log(`Music DB Editor running on port ${PORT}`);
