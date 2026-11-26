@@ -1,5 +1,10 @@
 // Surfaces the server's { error } message instead of a bare status code when available.
 async function parseResponse(response) {
+    // Session expired or logged out elsewhere: send the user back to sign in
+    if (response.status === 401) {
+        location.href = '/login';
+        throw new Error('Session expired - please sign in again');
+    }
     if (!response.ok) {
         let message = `HTTP ${response.status}`;
         try {

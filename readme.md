@@ -39,7 +39,29 @@ Run the additional SQL functions in your database:
 psql -d your_database -f database/setup.sql
 ```
 
-### 4. Start the Server
+### 4. Configure Login
+The editor requires a sign-in; the server will not start until a login is configured.
+Generate a password hash (input is hidden, minimum 12 characters):
+```bash
+npm run hash-password
+```
+Then add to `.env`:
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=scrypt$...   # the line printed above
+```
+
+| Variable | Default | Description |
+|---|---|---|
+| `SESSION_IDLE_MINUTES` | `60` | Sign out after this much inactivity |
+| `SESSION_MAX_HOURS` | `12` | Sign out after this long regardless of activity |
+| `COOKIE_SECURE` | `true` when `NODE_ENV=production` | Send the session cookie only over HTTPS |
+| `TRUST_PROXY` | — | Set (e.g. `1`) behind a reverse proxy so rate limiting sees real client IPs |
+| `AUTH_DISABLED` | `false` | `true` turns login off entirely (local development only) |
+
+Sessions are kept in memory, so restarting the server signs everyone out. Five failed sign-ins from one IP lock that IP out for 15 minutes.
+
+### 5. Start the Server
 ```bash
 npm start
 ```

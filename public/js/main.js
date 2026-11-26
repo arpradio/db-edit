@@ -1,4 +1,5 @@
 import { UIComponents } from './ui.js';
+import { APIClient } from './api.js';
 import { StateManager } from './state.js';
 import { ModalManager } from './modals.js';
 import { QualityManager } from './quality.js';
@@ -106,6 +107,28 @@ window.revertSong = function revertSong(songId) {
 window.applyBulkChanges = async function applyBulkChanges() {
     await BulkActionManager.applyBulkChanges();
 };
+
+window.logout = async function logout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+        location.replace('/login');
+    }
+};
+
+// Shows who is signed in; hidden when the server runs with AUTH_DISABLED=true
+async function loadSession() {
+    try {
+        const me = await APIClient.get('/api/auth/me');
+        if (me.username) {
+            document.getElementById('sessionUser').textContent = me.username;
+            document.getElementById('sessionControls').hidden = false;
+        }
+    } catch {
+        // 401 already redirects to /login
+    }
+}
+loadSession();
 
 document.getElementById('searchInput').addEventListener('keypress', function (e) {
     if (e.key === 'Enter') {

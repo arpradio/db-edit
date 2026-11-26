@@ -1594,3 +1594,96 @@ body.has-global-save-bar {
         display: none;
     }
 }
+
+/* Session controls in the header */
+.session-controls {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.session-controls[hidden] {
+    display: none;
+}
+
+.session-user {
+    color: #aaa;
+}
+
+/* Login page */
+.login-body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 360px;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.login-logo {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    align-self: center;
+}
+
+.login-card h1 {
+    font-size: 18px;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.login-card label {
+    font-size: 13px;
+    color: #aaa;
+}
+
+.login-card input {
+    padding: 10px 12px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #333;
+    color: #f1f1f1;
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+
+.login-card input:focus {
+    outline: none;
+    border-color: #66b2ff;
+}
+
+.login-card .btn {
+    margin-top: 8px;
+}
+
+.login-card .btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.login-error {
+    background: rgba(235, 87, 87, 0.15);
+    border: 1px solid #eb5757;
+    color: #ff9b9b;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.login-error[hidden] {
+    display: none;
+}

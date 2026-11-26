@@ -1,14 +1,25 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const http = require('http');
 const { attachIndexerRelay, getIndexerConfig, RELAY_PATH } = require('./lib/indexerRelay');
+const { createAuth, getAuthConfig, assertAuthConfigured, securityHeaders, sameOriginWrites } = require('./lib/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const indexerConfig = getIndexerConfig();
+const authConfig = getAuthConfig();
+assertAuthConfigured(authConfig);
+const auth = createAuth(authConfig);
 
-app.use(cors());
+// Set TRUST_PROXY (e.g. "1") when running behind a reverse proxy so login rate limiting sees real client IPs
+if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY);
+app.disable('x-powered-by');
+
+app.use(securityHeaders);
+app.use(sameOriginWrites);
+app.use(auth.router);
+// Everything below - the editor UI and every /api route - requires a logged-in session
+app.use(auth.requireAuth);
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -29,7 +40,7 @@ app.use((err, req, res, next) => {
 });
 
 const server = http.createServer(app);
-attachIndexerRelay(server, indexerConfig);
+attachIndexerRelay(server, indexerConfig, auth.isUpgradeAuthorized);
 
 server.listen(PORT, () => {
     console.log(`Music DB Editor running on port ${PORT}`);

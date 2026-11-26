@@ -22,6 +22,10 @@
                 </div>
                 <span class="indexer-metric">Indexer slot <strong id="indexerCurrentSlot">-</strong></span>
                 <span class="indexer-metric">Tip <strong id="indexerNetworkTip">-</strong></span>
+                <span class="session-controls" id="sessionControls" hidden>
+                    <span class="session-user" id="sessionUser"></span>
+                    <button class="btn btn-small btn-secondary" onclick="logout()">Sign out</button>
+                </span>
             </div>
             <div class="indexer-header-meta" id="ogmiosHealthRow" hidden>
                 <span>Ogmios <strong id="ogmiosConnectionStatus">-</strong></span>

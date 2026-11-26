@@ -86,10 +86,11 @@ export class RelationshipManager {
                         <div class="search-dropdown">
                             <input type="text" placeholder="Search or create contributor..." id="contributorSearch-${song.id}"
                                    oninput="RelationshipManager.searchContributors(${song.id}, this.value)"
-                                   onkeydown="if (event.key === 'Escape') RelationshipManager.toggleAddContributorForm(${song.id})"
+                                   onkeydown="RelationshipManager.onContributorKeydown(event, ${song.id})"
                                    autocomplete="off">
                             <div class="search-results" id="contributorResults-${song.id}"></div>
                         </div>
+                        <button class="btn btn-small btn-primary" id="contributorAdd-${song.id}" onclick="RelationshipManager.submitContributor(${song.id})">Add</button>
                         <button class="btn btn-small btn-secondary" onclick="RelationshipManager.toggleAddContributorForm(${song.id})">Cancel</button>
                     </div>
                 </div>
@@ -127,8 +128,19 @@ export class RelationshipManager {
         }
     }
 
+    static onContributorKeydown(event, songId) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            RelationshipManager.submitContributor(songId);
+        } else if (event.key === 'Escape') {
+            RelationshipManager.toggleAddContributorForm(songId);
+        }
+    }
+
     static searchContributors(songId, query) {
         clearTimeout(contributorSearchTimeout);
+        // Typing again discards a suggestion picked earlier
+        delete document.getElementById(`contributorSearch-${songId}`).dataset.contributorId;
         const resultsContainer = document.getElementById(`contributorResults-${songId}`);
         const trimmed = query.trim();
 
@@ -143,7 +155,8 @@ export class RelationshipManager {
 
                 const exactMatch = contributors.some(c => (c.name || '').toLowerCase() === trimmed.toLowerCase());
                 resultsContainer.innerHTML = contributors.map(contributor => `
-                    <div class="search-result-item" onclick="RelationshipManager.selectContributor(${songId}, ${contributor.id})">
+                    <div class="search-result-item" data-name="${UIComponents.escapeHtml(contributor.name)}"
+                         onclick="RelationshipManager.selectContributor(${songId}, ${contributor.id}, this.dataset.name)">
                         <div><strong>${UIComponents.escapeHtml(contributor.name)}</strong></div>
                         ${contributor.ipi || contributor.isni ? `
                             <div style="font-size: 11px; color: #6c757d;">
@@ -152,7 +165,7 @@ export class RelationshipManager {
                             </div>` : ''}
                     </div>
                 `).join('') + (exactMatch ? '' : `
-                    <div class="search-result-item search-result-create" onclick="RelationshipManager.createAndLinkContributor(${songId})">
+                    <div class="search-result-item search-result-create" onclick="RelationshipManager.submitContributor(${songId}, { forceCreate: true })">
                         + Create "${UIComponents.escapeHtml(trimmed)}"
                     </div>
                 `);
@@ -186,31 +199,61 @@ export class RelationshipManager {
         return role;
     }
 
-    static async selectContributor(songId, contributorId) {
-        const role = RelationshipManager.getContributorRole(songId);
-        if (!role) return;
-        await RelationshipManager.linkContributor(songId, contributorId, role);
+    // Picking a suggestion fills the input; the Add button (or Enter) commits it
+    static selectContributor(songId, contributorId, name) {
+        const input = document.getElementById(`contributorSearch-${songId}`);
+        input.value = name;
+        input.dataset.contributorId = contributorId;
+        clearTimeout(contributorSearchTimeout);
+        document.getElementById(`contributorResults-${songId}`).style.display = 'none';
+        document.getElementById(`contributorAdd-${songId}`).focus();
     }
 
-    static async createAndLinkContributor(songId) {
-        const name = document.getElementById(`contributorSearch-${songId}`).value.trim();
-        if (!name) return;
+    // Links the picked contributor, else an existing one with exactly this name, else creates it
+    static async submitContributor(songId, { forceCreate = false } = {}) {
+        const input = document.getElementById(`contributorSearch-${songId}`);
+        const addButton = document.getElementById(`contributorAdd-${songId}`);
+        const name = input.value.trim();
+
+        if (addButton.disabled) return;
+        if (!name) {
+            UIComponents.showMessage('Enter a contributor name', 'error');
+            input.focus();
+            return;
+        }
         // Check the role before creating, so a missing role doesn't leave an unlinked contributor behind
         const role = RelationshipManager.getContributorRole(songId);
         if (!role) return;
 
+        clearTimeout(contributorSearchTimeout);
+        document.getElementById(`contributorResults-${songId}`).style.display = 'none';
+        addButton.disabled = true;
+
         try {
-            const result = await APIClient.post('/api/contributors', { name });
-            await RelationshipManager.linkContributor(songId, result.contributor.id, role);
+            let contributorId = forceCreate ? null : input.dataset.contributorId;
+
+            if (!contributorId && !forceCreate) {
+                const matches = await APIClient.get(`/api/contributors/search?q=${encodeURIComponent(name)}`);
+                const exact = matches.find(c => (c.name || '').toLowerCase() === name.toLowerCase());
+                if (exact) contributorId = exact.id;
+            }
+
+            if (!contributorId) {
+                const result = await APIClient.post('/api/contributors', { name });
+                contributorId = result.contributor.id;
+            }
+
+            await RelationshipManager.linkContributor(songId, contributorId, role);
         } catch (error) {
-            console.error('Create contributor error:', error);
-            UIComponents.showMessage(`Failed to create contributor: ${error.message}`, 'error');
+            console.error('Add contributor error:', error);
+            UIComponents.showMessage(`Failed to add contributor: ${error.message}`, 'error');
+        } finally {
+            // On success the card is re-rendered (fresh, empty form); otherwise re-enable this one
+            if (addButton.isConnected) addButton.disabled = false;
         }
     }
 
     static async linkContributor(songId, contributorId, role) {
-        document.getElementById(`contributorResults-${songId}`).style.display = 'none';
-
         try {
             await APIClient.post(`/api/songs/${songId}/contributors/${contributorId}/link`, { role });
             UIComponents.showMessage('Contributor linked successfully', 'success');
